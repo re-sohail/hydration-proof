@@ -80,6 +80,34 @@ const FOREIGN_ALLOWED: ReadonlySet<string> = new Set([
   'className', 'id', 'role', 'tabIndex', 'width', 'height', 'viewBox',
 ]);
 
+/**
+ * SVG presentation and geometry props: the prop name React accepts and the
+ * attribute it renders. Only consulted for foreign elements, and every entry is
+ * checked against react-dom/server 18 and 19 by the differential test.
+ */
+const FOREIGN_ATTRS: ReadonlyMap<string, string> = new Map([
+  // Geometry.
+  ['d', 'd'], ['cx', 'cx'], ['cy', 'cy'], ['r', 'r'],
+  ['x', 'x'], ['y', 'y'], ['x1', 'x1'], ['y1', 'y1'], ['x2', 'x2'], ['y2', 'y2'],
+  ['rx', 'rx'], ['ry', 'ry'], ['dx', 'dx'], ['dy', 'dy'], ['points', 'points'],
+  ['transform', 'transform'], ['preserveAspectRatio', 'preserveAspectRatio'],
+  ['offset', 'offset'], ['xmlns', 'xmlns'],
+  // Paint.
+  ['fill', 'fill'], ['fillOpacity', 'fill-opacity'], ['fillRule', 'fill-rule'],
+  ['stroke', 'stroke'], ['strokeWidth', 'stroke-width'], ['strokeOpacity', 'stroke-opacity'],
+  ['strokeLinecap', 'stroke-linecap'], ['strokeLinejoin', 'stroke-linejoin'],
+  ['strokeDasharray', 'stroke-dasharray'], ['strokeDashoffset', 'stroke-dashoffset'],
+  ['strokeMiterlimit', 'stroke-miterlimit'], ['opacity', 'opacity'],
+  ['stopColor', 'stop-color'], ['stopOpacity', 'stop-opacity'],
+  ['clipPath', 'clip-path'], ['clipRule', 'clip-rule'], ['mask', 'mask'], ['filter', 'filter'],
+  ['markerStart', 'marker-start'], ['markerMid', 'marker-mid'], ['markerEnd', 'marker-end'],
+  ['vectorEffect', 'vector-effect'], ['paintOrder', 'paint-order'],
+  // Text.
+  ['textAnchor', 'text-anchor'], ['dominantBaseline', 'dominant-baseline'],
+  ['fontFamily', 'font-family'], ['fontSize', 'font-size'], ['fontWeight', 'font-weight'],
+  ['letterSpacing', 'letter-spacing'],
+]);
+
 /** Props that never become attributes, or that React applies as properties. */
 const IGNORED_PROPS: ReadonlySet<string> = new Set([
   'key', 'ref', 'children', 'dangerouslySetInnerHTML', 'suppressHydrationWarning',
@@ -211,9 +239,16 @@ export function propsView(tag: string, foreign: boolean, props: Record<string, u
       continue;
     }
 
-    if (foreign && !FOREIGN_ALLOWED.has(key)) {
-      view.skipped.push(key);
-      continue;
+    if (foreign) {
+      const foreignName = FOREIGN_ATTRS.get(key);
+      if (foreignName !== undefined) {
+        view.attrs[foreignName] = knownAttr(value);
+        continue;
+      }
+      if (!FOREIGN_ALLOWED.has(key)) {
+        view.skipped.push(key);
+        continue;
+      }
     }
 
     const stringName = STRING_ATTRS.get(key);

@@ -45,6 +45,7 @@ import { prepareServer } from './run/server.ts';
 import { currentBranch, currentCommit } from './util/git.ts';
 import { detectPackageManager, selfCommand } from './util/package-manager.ts';
 import { VERSION } from './util/version.ts';
+import { FINGERPRINT_VERSION } from './issues/fingerprint.ts';
 
 export { RunError };
 
@@ -551,6 +552,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     const finishedAt = new Date();
     const report: Report = {
       schemaVersion: REPORT_SCHEMA_VERSION,
+      fingerprintVersion: FINGERPRINT_VERSION,
       tool: { name: 'hydration-proof', version: VERSION },
       run: {
         startedAt: startedAt.toISOString(),

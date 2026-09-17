@@ -23,6 +23,12 @@ export interface Expectation {
    * reported line must contain `contains`.
    */
   source?: { file: string; contains: string };
+  /**
+   * The cause cannot be read off the values, only out of the code (a
+   * `typeof window` branch, an API call). It is then required only when the
+   * file named by `source` was actually resolved.
+   */
+  causeNeedsSource?: true;
 }
 
 export interface FixtureCase {
@@ -39,6 +45,19 @@ export interface FixtureCase {
   expect?: Expectation;
   /** Only meaningful for one router. */
   only?: FixtureApp;
+  /**
+   * A real mismatch that React itself never reports, so `verify-fixtures`
+   * requires silence from React instead of a warning. These are the cases the
+   * props audit exists for: `true`, or the apps where React stays quiet.
+   */
+  reactSilent?: boolean | FixtureApp[];
+}
+
+/** Whether React is expected to say nothing about this case in development. */
+export function reactStaysQuiet(entry: FixtureCase): boolean {
+  const silent = entry.reactSilent;
+  if (silent === undefined || silent === false) return entry.kind === 'control';
+  return silent === true || silent.includes(entry.app);
 }
 
 /** Environment every fixture server runs with. */
@@ -79,6 +98,10 @@ const EXTENSION_SCRIPT = `(() => {
 })();`;
 
 const TEXT = ['HP1001'];
+/** The props audit: an attribute value that differs on both sides. */
+const ATTR = ['HP1002'];
+/** A form control's value, checked or selected state. */
+const FORM = ['HP1012'];
 const FILE = 'next-cases/src/broken.jsx';
 const at = (id: string, tag = 'p'): Expectation['source'] => ({ file: FILE, contains: `<${tag} id="${id}"` });
 
@@ -119,6 +142,40 @@ const shared: Omit<FixtureCase, 'app'>[] = [
   control('/theme-script'),
   control('/cdn-whitespace'),
   control('/streaming', { only: 'next-app' }),
+
+  // Attributes, properties and inner HTML: the text matches on both sides, so
+  // React 19 reports none of these in production and patches none of them.
+  broken('/attr-mismatch', { anyOfCodes: ATTR, selector: '#attr-mismatch', cause: ['browser-api'], source: at('attr-mismatch', 'a'), causeNeedsSource: true }),
+  broken('/style-mismatch', { anyOfCodes: ['HP1003'], selector: '#style-mismatch', cause: ['browser-api'], source: at('style-mismatch', 'div'), causeNeedsSource: true }),
+  broken(
+    '/svg-attr',
+    { anyOfCodes: ATTR, selector: '#svg-attr-dot', cause: ['theme'], source: at('svg-attr-dot', 'circle'), causeNeedsSource: true },
+    { context: { colorScheme: 'dark' } },
+  ),
+  // Measured: React 18 and 19 report nothing at all for a form control's value
+  // or selected state, not even in development. These two are the clearest
+  // evidence that the props audit finds what React does not.
+  broken(
+    '/textarea-value',
+    { anyOfCodes: [...FORM, ...TEXT], selector: '#textarea-value', cause: ['browser-api'], source: at('textarea-value', 'textarea'), causeNeedsSource: true },
+    { reactSilent: true },
+  ),
+  broken(
+    '/select-option',
+    { anyOfCodes: [...FORM, ...ATTR], selector: '#select-option', cause: ['browser-api'], source: at('select-option', 'select'), causeNeedsSource: true },
+    { reactSilent: true },
+  ),
+  broken('/dangerous-html', { anyOfCodes: ['HP1013', ...TEXT], selector: '#dangerous-html', cause: ['browser-api'], source: at('dangerous-html', 'div'), causeNeedsSource: true }),
+
+  // More ways to produce a different value in render.
+  broken('/random-uuid', { anyOfCodes: TEXT, selector: '#random-uuid', cause: ['random'], source: at('random-uuid'), causeNeedsSource: true }),
+  broken('/user-agent', { anyOfCodes: TEXT, selector: '#user-agent', cause: ['browser-api'], source: at('user-agent'), causeNeedsSource: true }),
+
+  // The right way to do what the pages above get wrong.
+  control('/sync-external-store'),
+  control('/portal'),
+  control('/suppress-attr'),
+  control('/random-in-effect'),
 ];
 
 export const CASES: FixtureCase[] = (['next-app', 'next-pages'] as const).flatMap((app) =>

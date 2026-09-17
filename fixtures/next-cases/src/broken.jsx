@@ -80,3 +80,72 @@ export function ApiDataCase({ origin, requestId }) {
   const data = read(url, () => fetch(url, { cache: 'no-store' }).then((response) => response.json()));
   return <p id="api-data">Visits: {data.count}</p>;
 }
+
+// --- Mismatches React does not always report -------------------------------
+// The text matches on both sides; only an attribute, a property or inner HTML
+// differs. React 19 never reports these in production and never patches them,
+// which is what the props audit is for.
+
+export function AttrMismatchCase() {
+  const region = isServer() ? 'eu-west' : 'us-east';
+  return (
+    <a id="attr-mismatch" href={`/pricing?region=${region}`} data-region={region}>
+      See pricing
+    </a>
+  );
+}
+
+export function StyleMismatchCase() {
+  // Written during render, unlike the layout-effect control which writes the
+  // same properties after hydration and must stay clean.
+  const offset = isServer() ? 8 : 24;
+  return (
+    <div id="style-mismatch" style={{ position: 'absolute', top: `${offset}px` }}>
+      Banner
+    </div>
+  );
+}
+
+export function SvgAttrCase() {
+  const dark = !isServer() && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return (
+    <svg id="svg-attr" width="24" height="24" viewBox="0 0 24 24" aria-label="Status">
+      <circle id="svg-attr-dot" cx="12" cy="12" r="10" fill={dark ? '#ffffff' : '#000000'} />
+    </svg>
+  );
+}
+
+export function TextareaValueCase() {
+  // `defaultValue` is children on the server and the `value` property on the
+  // client, so no mutation record is produced for it.
+  const draft = isServer() ? 'Saved draft' : 'Local draft';
+  return <textarea id="textarea-value" defaultValue={draft} rows={2} readOnly />;
+}
+
+export function SelectOptionCase() {
+  // The server renders `selected` on the matching option; the client sets the
+  // property.
+  const currency = isServer() ? 'EUR' : 'USD';
+  return (
+    <select id="select-option" defaultValue={currency} aria-label="Currency">
+      <option value="EUR">Euro</option>
+      <option value="USD">US dollar</option>
+    </select>
+  );
+}
+
+export function DangerousHtmlCase() {
+  const html = isServer() ? '<em>Server copy</em>' : '<em>Client copy</em>';
+  return <div id="dangerous-html" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+export function RandomUuidCase() {
+  return <p id="random-uuid">Session {crypto.randomUUID().slice(0, 8)}</p>;
+}
+
+export function UserAgentCase() {
+  // Node 21+ has a `navigator` global too, so this renders "other" on the
+  // server rather than falling into the first branch.
+  const engine = typeof navigator === 'undefined' ? 'server' : navigator.userAgent.includes('Chrome') ? 'Chromium' : 'other';
+  return <p id="user-agent">Rendered for {engine}</p>;
+}

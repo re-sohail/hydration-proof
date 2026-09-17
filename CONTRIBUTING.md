@@ -60,6 +60,15 @@ what `.github/workflows/compat.yml` does across the supported range.
 fresh Next.js app with that package manager, then runs `init`, `doctor` and
 `test` against it.
 
+`.github/workflows/real-world.yml` runs the packed CLI against pinned
+open-source Next.js apps. Those apps are expected to be clean, so **any** finding
+there fails the job: it is the false-positive check on code nobody here wrote.
+Detection is proven by the fixtures instead.
+
+What each surface promises is written down in
+[docs/compatibility.md](docs/compatibility.md); read it before changing a config
+option, an issue code, the report schema or a fingerprint.
+
 ## Checks
 
 ```bash

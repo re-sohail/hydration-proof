@@ -181,6 +181,7 @@ export function makeReport(): Report {
   const issues = [...guestProduct, redirect, ...nasty, navigation, ...adminProduct, ...devProduct];
   return {
     schemaVersion: 1,
+    fingerprintVersion: 1,
     tool: { name: 'hydration-proof', version: '1.2.3' },
     run: {
       startedAt: '2026-09-17T10:00:00.000Z',

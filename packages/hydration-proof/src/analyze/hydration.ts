@@ -1,5 +1,5 @@
 import { isAuditedAttribute, normalizeReactText } from '../shared/attr-map.ts';
-import type { CommitInfo, MutationBatch, SElement, SNode, Snapshot } from '../shared/protocol.ts';
+import type { CommitInfo, MutationBatch, SElement, SFragment, SNode, Snapshot } from '../shared/protocol.ts';
 import type { IssueCode } from '../issues/registry.ts';
 import type { Evidence } from '../report/model.ts';
 import { diffTrees, type DomChange } from '../dom/diff.ts';
@@ -33,6 +33,13 @@ export interface HydrationInput {
   reportUnusedSuppression: boolean;
   /** Compare reused elements with the props React renders. */
   propsAudit: boolean;
+  /**
+   * Form control values as the server sent them, keyed by `#id` or `[name]`.
+   * React applies `value`/`checked` in the mutation phase, which can be
+   * observed before the commit that would let the rewind undo it, so the
+   * parsed server HTML is the only race-free source for them.
+   */
+  serverForms?: Map<string, string>;
 }
 
 export interface HydrationEvent {
@@ -309,12 +316,85 @@ function classifyChange(
   }
 }
 
+/**
+ * The value the server HTML gives a form control. React renders `value` and
+ * `checked` as attributes on the server and as properties on the client, and
+ * `<select>` marks the chosen `<option>` with `selected`, so each control type
+ * has to be read the way the HTML parser would.
+ */
+export function formKeys(el: SElement): string[] {
+  const keys: string[] = [];
+  const id = getAttr(el, 'id');
+  if (id) keys.push(`#${id}`);
+  const name = getAttr(el, 'name');
+  if (name) keys.push(`${el.tag}[name=${name}]`);
+  return keys;
+}
+
+function serverFormValue(
+  el: SElement,
+  property: 'value' | 'checked',
+  post?: SElement,
+  serverForms?: Map<string, string>,
+): string | undefined {
+  // The parsed server HTML first: it cannot have been changed by React.
+  if (serverForms && post) {
+    for (const key of formKeys(post)) {
+      const value = serverForms.get(`${key}|${property}`);
+      if (value !== undefined) return value;
+    }
+  }
+  if (property === 'checked') return String(getAttr(el, 'checked') !== null);
+  if (el.tag === 'textarea') return textContent(el);
+  if (el.tag === 'input') return getAttr(el, 'value') ?? '';
+  if (el.tag === 'select') {
+    // The browser selects the marked option, or the first one when none is marked.
+    const options: SElement[] = [];
+    const walk = (node: SNode): void => {
+      if (!isElement(node)) return;
+      if (node.tag === 'option') options.push(node);
+      else for (const child of node.children) walk(child);
+    };
+    for (const child of el.children) walk(child);
+    if (options.length === 0) return undefined;
+    const chosen = options.find((option) => getAttr(option, 'selected') !== null) ?? options[0]!;
+    return getAttr(chosen, 'value') ?? textContent(chosen);
+  }
+  return undefined;
+}
+
+/**
+ * Reads every form control the server rendered, keyed by `#id|property` and
+ * `tag[name=…]|property`. Controls without an id or a name are left out: there
+ * is no reliable way to pair them with the live element, and a wrong pair would
+ * report a mismatch that does not exist.
+ */
+export function serverFormValues(parsed: SNode | SFragment): Map<string, string> {
+  const out = new Map<string, string>();
+  walk(parsed, (node) => {
+    if (!isElement(node)) return;
+    const property = node.tag === 'input' ? (INPUT_CHECKED_TYPES.has((getAttr(node, 'type') ?? 'text').toLowerCase()) ? 'checked' : 'value') : 'value';
+    if (node.tag !== 'input' && node.tag !== 'textarea' && node.tag !== 'select') return;
+    const value = serverFormValue(node, property);
+    if (value === undefined) return;
+    for (const key of formKeys(node)) {
+      const full = `${key}|${property}`;
+      // An ambiguous key is worse than none.
+      out.set(full, out.has(full) ? '\u0000ambiguous' : value);
+    }
+  });
+  for (const [key, value] of out) if (value === '\u0000ambiguous') out.delete(key);
+  return out;
+}
+
+const INPUT_CHECKED_TYPES: ReadonlySet<string> = new Set(['checkbox', 'radio']);
+
 function attributeIgnored(name: string, patterns: NormalizeOptions['ignoreAttributes']): boolean {
   const lower = name.toLowerCase();
   return patterns.some((pattern) => (typeof pattern === 'string' ? pattern.toLowerCase() === lower : pattern.test(lower)));
 }
 
-function auditElement(post: SElement, pre: SElement, event: HydrationEvent, report: boolean, normalize: NormalizeOptions): Draft[] {
+function auditElement(post: SElement, pre: SElement, event: HydrationEvent, report: boolean, normalize: NormalizeOptions, serverForms?: Map<string, string>): Draft[] {
   const client = post.client;
   if (!client || client.opaque !== undefined) return [];
   const ignoredAttribute = (name: string): boolean => attributeIgnored(name, normalize.ignoreAttributes) || attributeIgnored(name, normalize.maskAttributes);
@@ -376,6 +456,25 @@ function auditElement(post: SElement, pre: SElement, event: HydrationEvent, repo
         server: client.domStyle,
         client: client.style,
         message: `React applies style ${describeValue(client.style)} but the server HTML has ${describeValue(client.domStyle)}.`,
+      });
+    }
+  }
+
+  if (client.form !== undefined && !suppressed) {
+    const form = client.form;
+    const server = serverFormValue(pre, form.property, post, serverForms);
+    // React applies the property, so the live control holds React's value and
+    // the difference is silent: the field the user was shown changed.
+    if (server !== undefined && server !== form.client) {
+      emit('HP1012', {
+        confidence: form.dom === form.client ? 0.9 : 0.7,
+        attribute: form.property,
+        server,
+        client: form.client,
+        message:
+          `The server HTML gives ${describeValue(server)} for this control's ${form.property}, but React renders ` +
+          `${describeValue(form.client)}${form.dom === form.client ? ', which replaced it during hydration' : ''}. ` +
+          'React reports nothing for form properties.',
       });
     }
   }
@@ -578,7 +677,7 @@ export function analyzeHydration(input: HydrationInput): HydrationResult {
         const preNode = pre.get(node.id)?.node;
         if (!isElement(preNode) || !node.client) return;
         audited.add(node.id);
-        drafts.push(...auditElement(node, preNode, event, input.reportUnusedSuppression, input.normalize));
+        drafts.push(...auditElement(node, preNode, event, input.reportUnusedSuppression, input.normalize, input.serverForms));
       });
     }
 

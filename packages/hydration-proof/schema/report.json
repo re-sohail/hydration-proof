@@ -9,6 +9,10 @@
     "schemaVersion": {
       "const": 1
     },
+    "fingerprintVersion": {
+      "description": "How the fingerprints in this report were computed.",
+      "type": "integer"
+    },
     "tool": {
       "type": "object",
       "additionalProperties": false,
@@ -953,6 +957,7 @@
   },
   "required": [
     "schemaVersion",
+    "fingerprintVersion",
     "tool",
     "run",
     "summary",

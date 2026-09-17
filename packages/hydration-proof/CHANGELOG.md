@@ -1,5 +1,19 @@
 # hydration-proof
 
+## 1.0.0
+
+### Major Changes
+
+- 1.0: a written compatibility promise, and the detections the fixtures were missing.
+  
+  - **[Compatibility and stability](https://hydration.jscrate.dev/docs/compatibility)** says what you can build on. The CLI, the config options, the report schema, the issue codes, the exit codes, fingerprints and the plugin and adapter APIs follow semver from here. Diagnosis (which cause a finding gets, and the wording of messages) deliberately does not: it keeps improving.
+  - **Form controls are audited.** A `<textarea>`, `<input>` or `<select>` whose value, checked or selected state differs between the server HTML and what React renders is now reported as HP1012. React reports none of this — not even in development — so a pre-filled field that silently changes during hydration was invisible before.
+  - **SVG attributes are audited.** `fill`, `stroke`, `stroke-width`, `d`, the geometry and text attributes and the rest of the presentation set, with every prop-to-attribute mapping checked against react-dom/server 18 and 19.
+  - **Causes no longer come from a neighbouring component.** The source scan is limited to the function the element is in, so code further down a file that happens to call `Math.random()` can no longer explain a finding somewhere else. `isServer()`, `isBrowser`, `canUseDOM` and `typeof self` now count as browser-only checks, which is how most codebases actually spell them.
+  - **A baseline survives a fingerprint change.** Reports carry `fingerprintVersion`, and a baseline recorded with an older one is matched by code, route and selector instead, so a release that has to change fingerprints does not turn every known finding into a new one.
+  - A form value that React applies during the mutation phase is no longer reported as an outside script changing the page (it was intermittent, depending on when the browser delivered the mutation records).
+  - 63 fixture cases across both routers, 40 broken and 23 controls, each one checked against React's own verdict — including two cases where React's silence is the expected result.
+
 ## 0.9.0
 
 ### Minor Changes

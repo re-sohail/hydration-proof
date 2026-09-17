@@ -1,0 +1,104 @@
+name: Real-world apps
+
+# A tool that only works on its own fixtures is not a tool. This runs the
+# built CLI against pinned open-source Next.js apps that nobody here wrote and
+# that build without any secrets.
+#
+# The apps are expected to be clean, so any finding above `info` fails the job
+# and is a false positive to investigate — that is the whole point of running
+# them. Detection is proven by the fixture suite instead.
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/hydration-proof/src/**'
+      - '.github/workflows/real-world.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-world-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apps:
+    name: ${{ matrix.app }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Next.js' own examples, pinned to a tag so a broken upstream commit
+          # never fails this workflow. Each one exercises something different:
+          # static content and MDX, styled-components' SSR registry, and
+          # locale-aware routing, which is where hydration usually goes wrong.
+          - app: blog-starter
+            repo: vercel/next.js
+            ref: v15.5.7
+            path: examples/blog-starter
+            routes: '--route / --route /posts/preview'
+          - app: with-styled-components
+            repo: vercel/next.js
+            ref: v15.5.7
+            path: examples/with-styled-components
+            routes: '--route /'
+          - app: app-dir-i18n-routing
+            repo: vercel/next.js
+            ref: v15.5.7
+            path: examples/app-dir-i18n-routing
+            routes: '--route /en --route /de'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out hydration-proof
+        uses: actions/checkout@v4
+        with:
+          path: tool
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: tool/pnpm-lock.yaml
+
+      - name: Build and pack the CLI
+        working-directory: tool
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter hydration-proof build
+          pnpm --filter hydration-proof exec playwright-core install --with-deps chromium
+          pnpm --filter hydration-proof exec npm pack --pack-destination "$GITHUB_WORKSPACE"
+
+      - name: Check out ${{ matrix.app }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ matrix.ref }}
+          path: upstream
+          sparse-checkout: ${{ matrix.path }}
+
+      - name: Install the app with the packed CLI
+        working-directory: upstream/${{ matrix.path }}
+        run: |
+          npm install --no-audit --no-fund --legacy-peer-deps
+          npm install --no-save --legacy-peer-deps "$(ls "$GITHUB_WORKSPACE"/hydration-proof-*.tgz)"
+
+      # No config file: this is what a first run on a real app looks like, which
+      # is also the experience being tested.
+      - name: Test ${{ matrix.app }}
+        working-directory: upstream/${{ matrix.path }}
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npx hydration-proof test ${{ matrix.routes }} --reporter list,json,html --fail-on warning
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-world-${{ matrix.app }}
+          path: upstream/${{ matrix.path }}/.hydration-proof/report
+          retention-days: 14

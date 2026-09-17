@@ -8,6 +8,9 @@ import { propsView, styleDeclarations } from '../../../src/shared/attr-map.ts';
 
 const fixtures = fileURLToPath(new URL('../../../../../fixtures/', import.meta.url));
 
+/** Tags rendered in the SVG namespace by the cases below. */
+const FOREIGN_TAGS: ReadonlySet<string> = new Set(['svg', 'circle', 'path', 'rect', 'line', 'polygon', 'stop', 'text', 'g']);
+
 interface ReactPair {
   version: string;
   createElement: (type: string, props: Record<string, unknown>) => unknown;
@@ -28,7 +31,7 @@ function decode(value: string): string {
 /** Attributes of the first <tag> in the markup, named the way the HTML parser names them. */
 function attributesOf(markup: string, tag: string): Map<string, string> {
   const open = new RegExp(`<${tag}(?=[\\s/>])([^>]*)>`).exec(markup)?.[1] ?? '';
-  const foreign = tag === 'svg';
+  const foreign = FOREIGN_TAGS.has(tag);
   const out = new Map<string, string>();
   for (const match of open.matchAll(/([^\s=/]+)(?:="([^"]*)")?/g)) {
     out.set(foreign ? match[1]! : match[1]!.toLowerCase(), decode(match[2] ?? ''));
@@ -58,6 +61,20 @@ const CASES: [string, Record<string, unknown>][] = [
   ['script', { async: true, noModule: true, defer: true }],
   ['div', { onClick: () => {}, suppressHydrationWarning: true, children: 'text' }],
   ['svg', { viewBox: '0 0 10 10', className: 'icon', role: 'img' }],
+
+  // SVG: every entry of the presentation map, so a wrong attribute name is
+  // caught here rather than becoming a false "mismatch" on a real page.
+  ['svg', { xmlns: 'http://www.w3.org/2000/svg', width: 24, height: 24, preserveAspectRatio: 'xMidYMid meet' }],
+  ['circle', { cx: 12, cy: 12, r: 10, fill: '#000000', fillOpacity: 0.5, stroke: 'red', strokeWidth: 2 }],
+  ['circle', { strokeLinecap: 'round', strokeLinejoin: 'bevel', strokeDasharray: '4 2', strokeDashoffset: 3, strokeMiterlimit: 8, strokeOpacity: 0.25 }],
+  ['path', { d: 'M0 0L10 10', fillRule: 'evenodd', clipRule: 'nonzero', clipPath: 'url(#c)', vectorEffect: 'non-scaling-stroke', paintOrder: 'stroke' }],
+  ['path', { markerStart: 'url(#a)', markerMid: 'url(#b)', markerEnd: 'url(#c)', mask: 'url(#m)', filter: 'url(#f)', opacity: 0.75 }],
+  ['rect', { x: 1, y: 2, rx: 3, ry: 4, width: 5, height: 6, transform: 'translate(1,2)' }],
+  ['line', { x1: 0, y1: 1, x2: 2, y2: 3 }],
+  ['polygon', { points: '0,0 10,0 5,10' }],
+  ['stop', { offset: '50%', stopColor: '#fff', stopOpacity: 0.5 }],
+  ['text', { x: 1, y: 2, dx: 3, dy: 4, textAnchor: 'middle', dominantBaseline: 'central', fontFamily: 'serif', fontSize: 12, fontWeight: 700, letterSpacing: 2 }],
+  ['g', { 'data-role': 'icon', 'aria-hidden': true, id: 'group', className: 'layer' }],
 ];
 
 describe.each(['ssr-react18', 'ssr-react19'])('propsView matches %s', (harness) => {
@@ -66,7 +83,7 @@ describe.each(['ssr-react18', 'ssr-react19'])('propsView matches %s', (harness) 
   it.each(CASES)(`<%s> %j`, (tag, props) => {
     const markup = react.renderToStaticMarkup(react.createElement(tag, props));
     const rendered = attributesOf(markup, tag);
-    const view = propsView(tag, tag === 'svg', props);
+    const view = propsView(tag, FOREIGN_TAGS.has(tag), props);
     if (view.opaque !== undefined) return;
     for (const [name, expected] of Object.entries(view.attrs)) {
       expect(rendered.has(name) ? rendered.get(name) : null, `${name} in ${markup} (React ${react.version})`).toBe(expected);

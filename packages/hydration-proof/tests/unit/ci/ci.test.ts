@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyBaseline, buildBaseline, readBaseline, writeBaseline } from '../../../src/ci/baseline.ts';
+import { FINGERPRINT_VERSION } from '../../../src/issues/fingerprint.ts';
 import { codeownersRegex, OwnerResolver, ownersOf, parseCodeowners } from '../../../src/ci/owners.ts';
 import { createRedactor } from '../../../src/ci/redact.ts';
 import { githubWorkflow, gitlabJob } from '../../../src/cli/ci-templates.ts';
@@ -71,6 +72,7 @@ function page(overrides: Partial<PageResult> = {}): PageResult {
 function report(pages: PageResult[], issues: Issue[], run: Partial<Report['run']> = {}): Report {
   return {
     schemaVersion: 1,
+    fingerprintVersion: 1,
     tool: { name: 'hydration-proof', version: '0.7.0' },
     run: {
       startedAt: '2026-09-17T10:00:00.000Z',
@@ -202,6 +204,38 @@ describe('baseline', () => {
     const expired = [issue()];
     expect(applyBaseline(expired, read, { newOnly: true, now: new Date('2026-10-02T00:00:00Z') })).toHaveLength(1);
     expect(expired[0]!.ignored).toBeUndefined();
+  });
+
+  it('recognises a baseline recorded with an older fingerprint recipe', () => {
+    const now = new Date('2026-09-17T12:00:00Z');
+    const recorded = buildBaseline([issue()], undefined, now);
+    expect(recorded.fingerprintVersion).toBe(FINGERPRINT_VERSION);
+
+    // The same finding, but fingerprints are computed differently now.
+    const older = { ...recorded, fingerprintVersion: FINGERPRINT_VERSION - 1 };
+    const current = [issue({ fingerprint: 'computed-differently' })];
+    expect(applyBaseline(current, older, { newOnly: true, now })).toEqual([]);
+    expect(current[0]).toMatchObject({ baseline: { firstSeen: '2026-09-17' }, ignored: { rule: 'baseline' } });
+    expect(current[0]!.new).toBeUndefined();
+
+    // A finding on another element is still new.
+    const elsewhere = [issue({ fingerprint: 'other', selector: '#total' })];
+    applyBaseline(elsewhere, older, { newOnly: true, now });
+    expect(elsewhere[0]).toMatchObject({ new: true });
+
+    // Same version: only the fingerprint counts, so this one is new.
+    const sameVersion = [issue({ fingerprint: 'computed-differently' })];
+    applyBaseline(sameVersion, recorded, { newOnly: true, now });
+    expect(sameVersion[0]).toMatchObject({ new: true });
+
+    // Two entries that share code, route and selector are no evidence at all.
+    const ambiguous = {
+      ...older,
+      entries: [older.entries[0]!, { ...older.entries[0]!, fingerprint: 'fp-twin', scenarios: ['other'] }],
+    };
+    const unknown = [issue({ fingerprint: 'computed-differently' })];
+    applyBaseline(unknown, ambiguous, { newOnly: true, now });
+    expect(unknown[0]).toMatchObject({ new: true });
   });
 
   it('rejects broken baselines', () => {

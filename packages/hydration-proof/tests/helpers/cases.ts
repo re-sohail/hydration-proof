@@ -64,10 +64,20 @@ export function judge(entry: FixtureCase, issues: Issue[], options: JudgeOptions
   if (!hit) return { ok: false, detail: `missed; got ${summary}` };
   const parts = [`found ${hit.code}@${hit.selector ?? '-'}`];
   if (options.cause && expect.cause) {
-    if (!hit.cause || !expect.cause.includes(hit.cause.id)) {
-      return { ok: false, detail: `wrong cause ${hit.cause?.id ?? 'none'} (expected ${expect.cause.join('/')})` };
+    // Some causes are only visible in the code, not in the values. Those are
+    // required exactly when the file that computes the value was resolved: a
+    // production build without usable component source cannot know them, and
+    // saying so is more honest than guessing.
+    const needsSource = expect.causeNeedsSource === true && expect.source !== undefined;
+    const resolvedTheRightFile = hit.source?.file.endsWith(expect.source?.file ?? '\u0000') === true;
+    if (!needsSource || resolvedTheRightFile) {
+      if (!hit.cause || !expect.cause.includes(hit.cause.id)) {
+        return { ok: false, detail: `wrong cause ${hit.cause?.id ?? 'none'} (expected ${expect.cause.join('/')})` };
+      }
+      parts.push(`cause ${hit.cause.id} ${Math.round(hit.cause.confidence * 100)}%`);
+    } else {
+      parts.push(`cause only in the code (${hit.sourceUnavailableReason ?? hit.source?.file ?? 'no source'})`);
     }
-    parts.push(`cause ${hit.cause.id} ${Math.round(hit.cause.confidence * 100)}%`);
   }
   if (options.source && expect.source) {
     const source = hit.source;

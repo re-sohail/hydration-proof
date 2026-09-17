@@ -85,9 +85,16 @@ describe('diagnose', () => {
     const notes = component.evidence.map((entry) => entry.message);
     expect(notes).toContain('Stats.jsx:15 generates a random value: const count = Math.floor(Math.random() * 1000);');
     expect(notes.some((note) => /current time/.test(note))).toBe(false);
-    // As an element location, line 5 only looks 5 lines down and misses the call.
-    const element = diagnose(issue(values), { ...base, source: { content, line: 5, file: 'Stats.jsx' } });
-    expect(element.cause?.id).not.toBe('random');
+    // An element location is scanned the same way, because the element belongs
+    // to the function it sits in: the call further down is still found.
+    const element = diagnose(issue(values), { ...base, source: { content, line: 16, file: 'Stats.jsx' } });
+    expect(element.cause?.id).toBe('random');
+    expect(element.evidence.some((entry) => /current time/.test(entry.message))).toBe(false);
+
+    // ...and a finding in a neighbouring component does not borrow that call.
+    const header = diagnose(issue({ server: '2026', client: '2027' }), { ...base, source: { content, line: 2, file: 'Stats.jsx' } });
+    expect(header.cause?.id).not.toBe('random');
+    expect(header.evidence.some((entry) => /random/.test(entry.message))).toBe(false);
   });
 
   it('keeps intentional suppression as info and flags suspicious suppression', () => {

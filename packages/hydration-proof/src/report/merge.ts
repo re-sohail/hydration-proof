@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { basename, dirname, join, resolve } from 'node:path';
 import { summarize } from '../run/results.ts';
 import { REPORT_SCHEMA_VERSION, type Issue, type PageResult, type Report } from './model.ts';
+import { FINGERPRINT_VERSION } from '../issues/fingerprint.ts';
 
 // Combine the reports of CI shards (or monorepo projects) into one.
 
@@ -74,6 +75,7 @@ export function mergeReports(inputs: readonly MergeInput[]): Report {
   const baseUrls = [...new Set(runs.flatMap((run) => (run.baseUrl ? run.baseUrl.split(', ') : [])))];
   const merged: Report = {
     schemaVersion: REPORT_SCHEMA_VERSION,
+    fingerprintVersion: FINGERPRINT_VERSION,
     tool: first.tool,
     run: {
       ...first.run,

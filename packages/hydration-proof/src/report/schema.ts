@@ -156,6 +156,7 @@ const page = s.object(
 export const reportSchema: Schema = s.object(
   {
     schemaVersion: s.literal(REPORT_SCHEMA_VERSION),
+    fingerprintVersion: s.number({ integer: true, description: 'How the fingerprints in this report were computed.' }),
     tool: s.object({ name: s.literal('hydration-proof'), version: s.string() }, undefined, ['name', 'version']),
     run: s.object(
       {
@@ -216,7 +217,7 @@ export const reportSchema: Schema = s.object(
     ),
   },
   'hydration-proof report',
-  ['schemaVersion', 'tool', 'run', 'summary', 'pages', 'issues'],
+  ['schemaVersion', 'fingerprintVersion', 'tool', 'run', 'summary', 'pages', 'issues'],
 );
 
 export function reportJsonSchema(): JsonSchema {

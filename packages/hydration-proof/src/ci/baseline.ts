@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import type { Issue } from '../report/model.ts';
+import { FINGERPRINT_VERSION } from '../issues/fingerprint.ts';
 
 // Baselines let a team adopt hydration-proof on an app with known problems:
 // `hydration-proof baseline` records them, `test --new-only` fails only on
@@ -34,6 +35,12 @@ export interface BaselineFile {
   version: typeof BASELINE_VERSION;
   tool: 'hydration-proof';
   updatedAt: string;
+  /**
+   * The fingerprint version the entries were recorded with. When a release has
+   * to change how fingerprints are computed, an older baseline is still matched
+   * by code, route and selector, so nobody's pipeline turns red overnight.
+   */
+  fingerprintVersion?: number;
   entries: BaselineEntry[];
 }
 
@@ -105,6 +112,7 @@ export function buildBaseline(issues: readonly Issue[], previous: BaselineFile |
     version: BASELINE_VERSION,
     tool: 'hydration-proof',
     updatedAt: now.toISOString(),
+    fingerprintVersion: FINGERPRINT_VERSION,
     entries: sorted,
   };
 }
@@ -121,6 +129,11 @@ export interface ExpiredEntry {
   entry: BaselineEntry;
 }
 
+/** How an entry that no longer matches by fingerprint can still be recognised. */
+function looseKey(code: string, route: string, selector: string | undefined): string {
+  return `${code}|${route}|${selector ?? ''}`;
+}
+
 /**
  * Mark findings that are in the baseline. With `newOnly`, those findings are
  * ignored (they do not fail the run) unless their entry expired.
@@ -129,8 +142,21 @@ export function applyBaseline(issues: Issue[], baseline: BaselineFile, options: 
   const date = today(options.now);
   const entries = new Map(baseline.entries.map((entry) => [entry.fingerprint, entry]));
   const expired = new Map<string, ExpiredEntry>();
+  // An older baseline was recorded with a different fingerprint recipe, so its
+  // fingerprints cannot match. Fall back to what is still comparable rather
+  // than declaring every known finding new. Unambiguous keys only: two entries
+  // sharing one is no evidence about either.
+  const stale = baseline.fingerprintVersion !== undefined && baseline.fingerprintVersion !== FINGERPRINT_VERSION;
+  const loose = new Map<string, BaselineEntry | undefined>();
+  if (stale) {
+    for (const entry of baseline.entries) {
+      const key = looseKey(entry.code, entry.route, entry.selector);
+      loose.set(key, loose.has(key) ? undefined : entry);
+    }
+  }
   for (const issue of issues) {
-    const entry = entries.get(issue.fingerprint);
+    let entry = entries.get(issue.fingerprint);
+    if (!entry && stale) entry = loose.get(looseKey(issue.code, issue.route.pattern, issue.selector));
     if (!entry) {
       if (!issue.ignored) issue.new = true;
       continue;

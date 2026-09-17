@@ -258,7 +258,9 @@ const SOURCE_PATTERNS: SourcePattern[] = [
   { id: 'media-query', pattern: /\bmatchMedia\s*\(|\binnerWidth\b|\bscreen\.(?:width|height)\b/, score: 0.85, label: 'reads the screen size' },
   { id: 'css-in-js', pattern: /\bstyled(?:\.[a-z]+|\()|\bcss`|@emotion|makeStyles\s*\(/, score: 0.7, label: 'creates CSS-in-JS styles' },
   { id: 'data', pattern: /\bfetch\s*\(|\buseSWR\s*\(|\buseQuery\s*\(|\baxios\b/, score: 0.65, label: 'fetches data' },
-  { id: 'browser-api', pattern: /typeof\s+(?:window|document|navigator)\b|\bnavigator\.|\bwindow\.(?!matchMedia|localStorage|sessionStorage)/, score: 0.6, label: 'uses a browser-only API' },
+  // `isServer()` / `IS_BROWSER` and friends are how most codebases spell the
+  // `typeof window` check, so the bare check alone misses most real code.
+  { id: 'browser-api', pattern: /typeof\s+(?:window|document|navigator|self)\b|\bnavigator\.|\bwindow\.(?!matchMedia|localStorage|sessionStorage)|\b(?:is|IS_)(?:Server|Browser|Client|SERVER|BROWSER|CLIENT)\b|\bcanUseDOM\b/, score: 0.6, label: 'uses a browser-only API' },
 ];
 
 const SCAN_RADIUS = 30;
@@ -284,25 +286,63 @@ function blockEnd(lines: readonly string[], from: number): number {
   return limit;
 }
 
+/**
+ * Lines that start a top-level function, component or class. Indentation is
+ * limited so that an inner callback (an effect body, a map) is not mistaken for
+ * the component itself.
+ */
+const FUNCTION_STARTS: readonly RegExp[] = [
+  /^\s{0,4}(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+[A-Za-z_$]/,
+  /^\s{0,4}(?:export\s+)?(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(?:async\s*)?(?:function\b|\(|[A-Za-z_$][\w$]*\s*=>)/,
+  /^\s{0,4}(?:export\s+)?(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(?:React\.)?(?:memo|forwardRef)\s*\(/,
+  /^\s{0,4}(?:export\s+)?(?:default\s+)?class\s+[A-Za-z_$]/,
+];
+
+/** The block of the function that contains `from` (a 0-based line index). */
+function enclosingFunction(lines: readonly string[], from: number): { start: number; end: number } | undefined {
+  for (let index = from; index >= 0 && from - index <= MAX_COMPONENT_LINES; index--) {
+    if (!FUNCTION_STARTS.some((pattern) => pattern.test(lines[index]!))) continue;
+    const end = blockEnd(lines, index);
+    // Only useful if the element really is inside this function's block.
+    if (end > from) return { start: index, end };
+    return undefined;
+  }
+  return undefined;
+}
+
 function sourceCandidates(issue: Issue, context: DiagnosisContext): { candidates: Candidate[]; hits: Evidence[] } {
   const source = context.source;
   if (!source) return { candidates: [], hits: [] };
   const lines = source.content.split(/\r?\n/);
-  const component = source.scope === 'component';
-  const start = component ? source.line - 1 : Math.max(0, source.line - 1 - SCAN_RADIUS);
-  const end = component ? blockEnd(lines, source.line - 1) : Math.min(lines.length, source.line + 5);
+  const line = source.line - 1;
+  // Where to look, most precise first. A file usually holds several
+  // components, so the function the element sits in is the limit: code in a
+  // neighbour must never explain this finding, and a wide window around the
+  // line is only used when no enclosing function can be found at all.
+  const ranges: { start: number; end: number }[] = [];
+  if (source.scope === 'component') ranges.push({ start: line, end: blockEnd(lines, line) });
+  const enclosing = enclosingFunction(lines, line);
+  if (enclosing) ranges.push(enclosing);
+  else ranges.push({ start: Math.max(0, line - SCAN_RADIUS), end: Math.min(lines.length, source.line + 5) });
+
   const candidates: Candidate[] = [];
   const hits: Evidence[] = [];
-  const best = new Map<CauseId, { distance: number; line: number; label: string; score: number }>();
-  for (let index = start; index < end; index++) {
-    const text = lines[index]!;
-    if (/^\s*(?:\/\/|\*)/.test(text)) continue;
-    for (const entry of SOURCE_PATTERNS) {
-      if (!entry.pattern.test(text)) continue;
-      const distance = Math.abs(index + 1 - source.line);
-      const previous = best.get(entry.id);
-      if (!previous || distance < previous.distance) best.set(entry.id, { distance, line: index + 1, label: entry.label, score: entry.score });
+  let best = new Map<CauseId, { distance: number; line: number; label: string; score: number }>();
+  for (const range of ranges) {
+    best = new Map();
+    for (let index = range.start; index < range.end; index++) {
+      const text = lines[index]!;
+      if (/^\s*(?:\/\/|\*)/.test(text)) continue;
+      for (const entry of SOURCE_PATTERNS) {
+        if (!entry.pattern.test(text)) continue;
+        const distance = Math.abs(index + 1 - source.line);
+        const previous = best.get(entry.id);
+        if (!previous || distance < previous.distance) best.set(entry.id, { distance, line: index + 1, label: entry.label, score: entry.score });
+      }
     }
+    // The narrowest range that explains anything wins; a wider one would only
+    // add code that belongs to something else.
+    if (best.size > 0) break;
   }
   for (const [id, hit] of best) {
     // Nearer code is stronger evidence.

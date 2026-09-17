@@ -235,6 +235,11 @@ export interface HistoryEntry {
 
 export interface Report {
   schemaVersion: typeof REPORT_SCHEMA_VERSION;
+  /**
+   * How the fingerprints in this report were computed. A baseline recorded
+   * with an older version is still matched by code, route and selector.
+   */
+  fingerprintVersion: number;
   tool: { name: 'hydration-proof'; version: string };
   run: RunInfo;
   summary: Summary;

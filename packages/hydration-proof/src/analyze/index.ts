@@ -11,7 +11,7 @@ import type { Draft } from './draft.ts';
 import { analyzeDuplicateIds, analyzeHead } from './document.ts';
 import { analyzeErrors, isWarningKind, standaloneDraft, type ReactReport } from './errors.ts';
 import { analyzeExternal } from './external.ts';
-import { analyzeHydration } from './hydration.ts';
+import { analyzeHydration, serverFormValues } from './hydration.ts';
 import { analyzeMarkup } from './markup.ts';
 import { analyzeOutcome } from './outcome.ts';
 import { buildTimeline } from './timeline.ts';
@@ -255,6 +255,7 @@ export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undef
     normalize,
     reportUnusedSuppression: options.reportUnusedSuppression ?? false,
     propsAudit: options.propsAudit ?? true,
+    ...(parsed ? { serverForms: serverFormValues(parsed.tree) } : {}),
   });
   drafts.push(...hydration.drafts);
 

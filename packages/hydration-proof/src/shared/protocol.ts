@@ -60,6 +60,23 @@ export interface ClientView {
   opaque?: string;
   /** Events React handles here that a script listener or an inline on* attribute also handles. */
   handlers?: string[];
+  /**
+   * Form controls only. These are properties, not attributes: they produce no
+   * mutation records, so the rewind cannot reconstruct them and they have to be
+   * compared against the server HTML directly.
+   */
+  form?: FormView;
+}
+
+export interface FormView {
+  /** `value` for input/textarea/select, `checked` for checkbox and radio. */
+  property: 'value' | 'checked';
+  /** What React's props ask for. */
+  client: string;
+  /** What the control holds at capture time. */
+  dom: string;
+  /** The value came from `value`/`checked` rather than `defaultValue`/`defaultChecked`. */
+  controlled?: true;
 }
 
 export interface SElement {

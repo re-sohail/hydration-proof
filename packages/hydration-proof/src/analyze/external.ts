@@ -83,6 +83,10 @@ export function analyzeExternal(input: ExternalInput): Draft[] {
   const drafts: Draft[] = [];
   for (const change of changes) {
     if (pendingTail.has(change)) continue;
+    // Form properties produce no mutation records, so the rewind cannot put
+    // them back and a difference here says nothing about who changed them. The
+    // props audit compares them against the server HTML instead (HP1012).
+    if (change.kind === 'form') continue;
     const element = change.afterElement;
     const inHeadElement = inHead(liveIndex, element);
     const owned = element !== undefined && input.reactOwned.has(element);
@@ -91,6 +95,13 @@ export function analyzeExternal(input: ExternalInput): Draft[] {
     const host = parentOfInsert ?? target;
     const onRoot = isElement(host) && (host.tag === 'html' || host.tag === 'body');
     const hydrated = insideRoot(liveIndex, element, input.containers);
+
+    // React writes a <textarea>'s value into its child text node during the
+    // hydration mutation phase, which can be observed before the commit
+    // callback that would tag the batch. That is React's own value handling,
+    // not somebody else editing the page: the props audit compares it against
+    // the server HTML instead (HP1012).
+    if (change.kind === 'text' && owned && isElement(target) && target.tag === 'textarea') continue;
 
     if ((change.kind === 'insert' || change.kind === 'remove') && inHeadElement) {
       const node = change.after ?? change.before;

@@ -4,6 +4,7 @@ import type { Report } from '../../src/report/model.ts';
 
 const report: Report = {
   schemaVersion: 1,
+  fingerprintVersion: 1,
   tool: { name: 'hydration-proof', version: '0.0.0' },
   run: { startedAt: '', finishedAt: '', durationMs: 0, cwd: '/', node: 'v24', platform: 'x', playwright: '1', browsers: [], mode: 'production' },
   summary: { pages: 0, routes: 0, passed: 0, warnings: 0, failed: 1, errored: 0, issues: { error: 0, warning: 0, info: 0 }, ignored: 0 },

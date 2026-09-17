@@ -1,10 +1,15 @@
 // Ground truth: every broken fixture page must make React itself report a
 // hydration problem in development mode, and no control page may.
 //
+// The exception is a case marked `reactSilent`: a real mismatch React never
+// reports (an attribute, a property, inner HTML). For those this script
+// requires React to stay quiet, which is the evidence that the props audit
+// finds something React does not.
+//
 // Usage: node scripts/verify-fixtures.ts [next-app|next-pages]
 
 import { chromium, type Browser } from 'playwright-core';
-import { CASES, caseId, DEFAULT_CONTEXT, type FixtureApp, type FixtureCase } from '../fixtures/cases.ts';
+import { CASES, caseId, DEFAULT_CONTEXT, reactStaysQuiet, type FixtureApp, type FixtureCase } from '../fixtures/cases.ts';
 import { startFixture, type RunningFixture } from './lib/fixtures.ts';
 
 const HYDRATION_MESSAGE =
@@ -56,8 +61,10 @@ async function main(): Promise<void> {
         for (const entry of cases) await fetch(fixture.url + entry.route).catch(() => {});
         for (const entry of cases) {
           const found = await visit(browser, fixture, entry);
-          const ok = entry.kind === 'broken' ? found.length > 0 : found.length === 0;
-          rows.push({ id: caseId(entry), ok, detail: found[0]?.split('\n')[0]?.slice(0, 110) ?? '—' });
+          const quiet = reactStaysQuiet(entry);
+          const ok = quiet ? found.length === 0 : found.length > 0;
+          const detail = found[0]?.split('\n')[0]?.slice(0, 110) ?? (quiet && entry.kind === 'broken' ? 'React said nothing (as expected)' : '—');
+          rows.push({ id: caseId(entry), ok, detail });
         }
       } finally {
         await fixture.stop();
