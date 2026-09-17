@@ -22,6 +22,8 @@ export default function Home() {
         <li><a href="/layout-effect">layout-effect</a></li>
         <li><a href="/theme-script">theme-script</a></li>
         <li><a href="/streaming">streaming</a></li>
+        <li><a href="/search?q=hydration">search</a></li>
+        <li><a href="/login">login</a></li>
       </ul>
     </main>
   );
