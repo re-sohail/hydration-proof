@@ -3,7 +3,9 @@
   // can't leak into code that runs in Node.
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    "declarationMap": false,
+    "sourceMap": false
   },
   "include": ["src"],
   "exclude": ["src/runtime", "src/report/client", "dist", "node_modules"]

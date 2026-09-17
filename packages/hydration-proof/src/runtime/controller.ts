@@ -30,7 +30,7 @@ import { installHook } from './hook.ts';
 import { idOf } from './ids.ts';
 import { MutationLog } from './observer.ts';
 import { cssPath } from './selector.ts';
-import { serializeRoot } from './serialize.ts';
+import { serializeRoot, setIgnoreSelectors } from './serialize.ts';
 
 interface RootState {
   info: RootInfo;
@@ -210,6 +210,7 @@ export function startRuntime(options: RuntimeOptions): RuntimeApi {
     activity++;
   }
 
+  if (options.ignoreSelectors.length > 0) setIgnoreSelectors(options.ignoreSelectors);
   installErrorCapture(sink, options.captureWarnings);
   installHook({ onInject, onCommit, onPostCommit });
   log.start();

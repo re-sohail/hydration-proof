@@ -94,7 +94,6 @@ export function analyzeMarkup(html: string, parsed: SFragment): Draft[] {
           `${label(violation.child)} cannot be a ${relation} of ${label(violation.ancestor)} ` +
           `(line ${violation.child.line}, column ${violation.child.column}).` +
           (repaired ? ' The browser moved it while parsing, so React cannot hydrate this markup.' : ''),
-        server: `${label(violation.ancestor)} > ${label(violation.child)}`,
         evidence: [
           {
             kind: 'markup',

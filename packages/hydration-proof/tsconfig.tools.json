@@ -9,5 +9,5 @@
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["tests", "scripts", "*.config.ts"]
+  "include": ["tests", "scripts", "*.config.ts", "src/virtual.d.ts"]
 }

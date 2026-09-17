@@ -1,0 +1,600 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hydration.jscrate.dev/schema/report.json",
+  "title": "hydration-proof report",
+  "description": "hydration-proof report",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "hydration-proof"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "startedAt": {
+          "type": "string"
+        },
+        "finishedAt": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "number"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "playwright": {
+          "type": "string"
+        },
+        "browsers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mode": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "ci": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "startedAt",
+        "finishedAt",
+        "durationMs",
+        "cwd",
+        "node",
+        "platform",
+        "playwright",
+        "browsers",
+        "mode"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pages": {
+          "type": "integer"
+        },
+        "routes": {
+          "type": "integer"
+        },
+        "passed": {
+          "type": "integer"
+        },
+        "warnings": {
+          "type": "integer"
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "errored": {
+          "type": "integer"
+        },
+        "issues": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "type": "integer"
+            },
+            "warning": {
+              "type": "integer"
+            },
+            "info": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "error",
+            "warning",
+            "info"
+          ]
+        },
+        "ignored": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pages",
+        "routes",
+        "passed",
+        "warnings",
+        "failed",
+        "errored",
+        "issues",
+        "ignored"
+      ]
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "description": "One route tested in one scenario.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "route": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "pattern": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "pattern"
+            ]
+          },
+          "scenario": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "finalUrl": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "warning",
+              "failed",
+              "error"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "http": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "type": "integer"
+              },
+              "redirects": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "url",
+                    "status"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "status",
+              "redirects"
+            ]
+          },
+          "react": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "build": {
+                "type": "string",
+                "enum": [
+                  "production",
+                  "development",
+                  "unknown"
+                ]
+              },
+              "roots": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "selector": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "hydrate",
+                        "client"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "selector",
+                    "mode"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "version",
+              "build",
+              "roots"
+            ]
+          },
+          "timings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "navigation": {
+                "type": "number"
+              },
+              "hydration": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "navigation",
+              "total"
+            ]
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "error": {
+                "type": "integer"
+              },
+              "warning": {
+                "type": "integer"
+              },
+              "info": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "error",
+              "warning",
+              "info"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "route",
+          "scenario",
+          "url",
+          "finalUrl",
+          "status",
+          "outcome",
+          "timings",
+          "issues",
+          "counts"
+        ]
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "description": "One finding.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "HP1001",
+              "HP1002",
+              "HP1003",
+              "HP1004",
+              "HP1005",
+              "HP1006",
+              "HP1007",
+              "HP1008",
+              "HP1009",
+              "HP1010",
+              "HP1011",
+              "HP1012",
+              "HP1013",
+              "HP1014",
+              "HP1015",
+              "HP2001",
+              "HP2002",
+              "HP2003",
+              "HP2004",
+              "HP2005",
+              "HP2006",
+              "HP2007",
+              "HP3001",
+              "HP3002",
+              "HP3003",
+              "HP4001",
+              "HP4002",
+              "HP4003",
+              "HP5001",
+              "HP5002",
+              "HP5003",
+              "HP6001",
+              "HP6002",
+              "HP6003",
+              "HP9001",
+              "HP9002",
+              "HP9003",
+              "HP9004",
+              "HP9005",
+              "HP9006",
+              "HP9007",
+              "HP9008",
+              "HP9009"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "message": {
+            "type": "string"
+          },
+          "route": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "pattern": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "pattern"
+            ]
+          },
+          "scenario": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "raw",
+              "parsed",
+              "pre-hydration",
+              "hydration",
+              "post-effect",
+              "stable",
+              "runtime"
+            ]
+          },
+          "selector": {
+            "type": "string"
+          },
+          "domPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attribute": {
+            "type": "string"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "client": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "component": {
+            "type": "string"
+          },
+          "componentStack": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              },
+              "column": {
+                "type": "integer"
+              },
+              "frame": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "file",
+              "line"
+            ]
+          },
+          "sourceUnavailableReason": {
+            "type": "string"
+          },
+          "cause": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "confidence"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "react-error",
+                    "react-warning",
+                    "console",
+                    "page-error",
+                    "dom-change",
+                    "mutation",
+                    "http",
+                    "markup",
+                    "note"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "message"
+              ]
+            }
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "docsUrl": {
+            "type": "string"
+          },
+          "ignored": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "rule": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason",
+              "rule"
+            ]
+          },
+          "suppressed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "code",
+          "title",
+          "severity",
+          "confidence",
+          "message",
+          "route",
+          "scenario",
+          "stage",
+          "evidence",
+          "suggestions",
+          "docsUrl"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "tool",
+    "run",
+    "summary",
+    "pages",
+    "issues"
+  ]
+}

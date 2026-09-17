@@ -22,8 +22,8 @@ function shellStart(page: string, head: string, label: string): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>${page} (${label})</title>${head}</head><body><div id="root">`;
 }
 
-function shellEnd(page: string): string {
-  return `</div><script>window.__PAGE__=${JSON.stringify(page)}</script><script src="/client.js" defer></script></body></html>`;
+function shellEnd(page: string, bodyEnd = ''): string {
+  return `</div>${bodyEnd}<script>window.__PAGE__=${JSON.stringify(page)}</script><script src="/client.js" defer></script></body></html>`;
 }
 
 export async function startHarness(deps: HarnessDeps, port = 0): Promise<{ url: string; server: Server }> {
@@ -55,11 +55,11 @@ export async function startHarness(deps: HarnessDeps, port = 0): Promise<{ url: 
     res.write(shellStart(name, page.head ?? '', deps.label));
 
     if (page.clientOnly) {
-      res.end(shellEnd(name));
+      res.end(shellEnd(name, page.bodyEnd));
       return;
     }
     if (!page.stream) {
-      res.end(deps.ReactDOMServer.renderToString(h(page.App)) + shellEnd(name));
+      res.end(deps.ReactDOMServer.renderToString(h(page.App)) + shellEnd(name, page.bodyEnd));
       return;
     }
     const forward = new Writable({
@@ -67,7 +67,7 @@ export async function startHarness(deps: HarnessDeps, port = 0): Promise<{ url: 
         res.write(chunk, callback);
       },
       final(callback) {
-        res.end(shellEnd(name));
+        res.end(shellEnd(name, page.bodyEnd));
         callback();
       },
     });

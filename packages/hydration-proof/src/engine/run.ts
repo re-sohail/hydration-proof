@@ -25,6 +25,8 @@ export interface EngineOptions {
   /** Capture stage 2 (browser-parsed server HTML). */
   parseStage: boolean;
   reportUnusedSuppression: boolean;
+  /** Compare attributes and text with what React renders on the client. */
+  propsAudit: boolean;
   /** Retry a page whose capture failed to navigate. */
   retries: number;
 }
@@ -35,6 +37,7 @@ export const DEFAULT_ENGINE: EngineOptions = {
   runtime: {},
   parseStage: true,
   reportUnusedSuppression: false,
+  propsAudit: true,
   retries: 0,
 };
 
@@ -60,7 +63,13 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
   let parseError: string | undefined;
   if (options.parseStage && capture.document?.body !== undefined) {
     try {
-      parsed = await parseDocument(browser, capture.document, parseContextOptions(job.scenario.context));
+      parsed = await parseDocument(
+        browser,
+        capture.document,
+        parseContextOptions(job.scenario.context),
+        'csp',
+        options.runtime.ignoreSelectors ?? [],
+      );
     } catch (error) {
       parseError = error instanceof Error ? error.message : String(error);
     }
@@ -70,6 +79,7 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
     route: job.route,
     scenario: job.scenario.name,
     reportUnusedSuppression: options.reportUnusedSuppression,
+    propsAudit: options.propsAudit,
   };
   if (options.normalize) analyzeOptions.normalize = options.normalize;
   if (job.expectedStatuses) analyzeOptions.expectedStatuses = job.expectedStatuses;

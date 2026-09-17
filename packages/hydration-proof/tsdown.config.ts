@@ -12,6 +12,7 @@ export default defineConfig({
   treeshake: true,
   clean: true,
   fixedExtension: false,
+  hash: false,
   plugins: [inlineBrowserBundles()],
   deps: {
     neverBundle: ['playwright-core', /^playwright-core\//],

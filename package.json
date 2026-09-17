@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "pnpm --filter \"./packages/*\" build",
-    "typecheck": "pnpm --filter \"./packages/*\" typecheck",
+    "typecheck": "tsc -p tsconfig.json && pnpm --filter \"./packages/*\" typecheck",
     "test": "pnpm --filter \"./packages/*\" test",
     "test:unit": "pnpm --filter hydration-proof test:unit",
     "test:browser": "pnpm --filter hydration-proof test:browser",
@@ -17,7 +17,9 @@
     "verify:fixtures": "node scripts/verify-fixtures.ts",
     "measure": "node scripts/measure.ts",
     "changeset": "changeset",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && changeset publish",
+    "docs": "node scripts/generate-docs.ts",
+    "docs:check": "node scripts/generate-docs.ts --check"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",

@@ -1,0 +1,34 @@
+# hydration-proof
+
+Find, explain and prevent React hydration problems before users see them.
+
+This repository contains:
+
+| Path | |
+| --- | --- |
+| [`packages/hydration-proof`](packages/hydration-proof) | The CLI and Node API published to npm as [`hydration-proof`](https://www.npmjs.com/package/hydration-proof) |
+| [`docs`](docs) | Documentation (also published at https://hydration.jscrate.dev) |
+| [`fixtures`](fixtures) | Apps with known hydration bugs, used to prove every detection |
+| [`scripts`](scripts) | Fixture, measurement and documentation tooling |
+
+Start with the [package README](packages/hydration-proof/README.md).
+
+## Development
+
+Requires Node.js 22.18+ and pnpm 10.
+
+```bash
+pnpm install
+pnpm --filter hydration-proof exec playwright-core install chromium firefox webkit
+pnpm test                 # unit and browser tests
+pnpm fixtures:build       # build the Next.js fixture apps
+pnpm test:e2e             # every fixture case against production builds
+pnpm verify:fixtures      # React itself confirms each broken fixture (dev mode)
+pnpm build                # build, publint, are-the-types-wrong, size budget
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+MIT © [Sohail Khan](https://me.jscrate.dev)

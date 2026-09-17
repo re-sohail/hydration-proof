@@ -22,6 +22,8 @@ export interface AnalyzeOptions {
   reportUnusedSuppression?: boolean;
   /** HTTP statuses that are expected for this route. */
   expectedStatuses?: readonly number[];
+  /** Compare attributes and text with what React renders on the client. Default true. */
+  propsAudit?: boolean;
 }
 
 export interface PageAnalysis {
@@ -124,7 +126,17 @@ function merge(drafts: Draft[], reports: ReactReport[], commits: CommitInfo[]): 
   return kept;
 }
 
-function toIssue(draft: Draft, options: AnalyzeOptions): Issue {
+/**
+ * Production builds minify component names (`x`, `Ab`). Such names are noise
+ * in a report, so they are dropped with an explanation.
+ */
+function usableComponent(name: string | undefined, production: boolean): string | undefined {
+  if (name === undefined) return undefined;
+  if (production && /^[A-Za-z_$][\w$]?$/.test(name)) return undefined;
+  return name;
+}
+
+function toIssue(draft: Draft, options: AnalyzeOptions, production: boolean): Issue {
   const definition = issueDefinition(draft.code);
   const input: Parameters<typeof fingerprint>[0] = { code: draft.code, routePattern: options.route.pattern };
   if (draft.selector !== undefined) input.selector = draft.selector;
@@ -149,11 +161,17 @@ function toIssue(draft: Draft, options: AnalyzeOptions): Issue {
   if (draft.attribute !== undefined) issue.attribute = draft.attribute;
   if (draft.server !== undefined) issue.server = draft.server;
   if (draft.client !== undefined) issue.client = draft.client;
-  if (draft.component !== undefined) issue.component = draft.component;
+  const component = usableComponent(draft.component, production);
+  if (component !== undefined) issue.component = component;
   if (draft.componentStack !== undefined) issue.componentStack = draft.componentStack;
   if (draft.suppressed) issue.suppressed = true;
+  if (draft.ignoredBy !== undefined) {
+    issue.ignored = { reason: `Inside an element matching ${draft.ignoredBy}.`, rule: 'ignore.selectors' };
+  }
   if (issue.source === undefined) {
-    issue.sourceUnavailableReason = 'Source mapping is not enabled in this version.';
+    issue.sourceUnavailableReason = production
+      ? 'Production builds minify component names and code. Run with --mode development for component names and source locations.'
+      : 'Source mapping is not enabled in this version.';
   }
   return issue;
 }
@@ -210,6 +228,7 @@ export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undef
     containers,
     normalize,
     reportUnusedSuppression: options.reportUnusedSuppression ?? false,
+    propsAudit: options.propsAudit ?? true,
   });
   drafts.push(...hydration.drafts);
 
@@ -243,7 +262,8 @@ export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undef
   }
 
   const merged = merge(drafts, errorAnalysis.reports, runtime.commits);
-  const issues = dedupe(merged.map((draft) => toIssue(draft, options))).sort(
+  const production = runtime.renderers[0]?.bundleType === 0;
+  const issues = dedupe(merged.map((draft) => toIssue(draft, options, production))).sort(
     (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.code.localeCompare(b.code),
   );
   const analysis: PageAnalysis = { issues, status: pageStatus(capture, issues) };

@@ -9,6 +9,13 @@ export function globToRegExp(glob: string): RegExp {
   let source = '';
   for (let i = 0; i < glob.length; i++) {
     const ch = glob[i]!;
+    if (ch === '/' && glob[i + 1] === '*' && glob[i + 2] === '*' && (i + 3 === glob.length || glob[i + 3] === '/')) {
+      // `/**` also matches the parent itself: /api/** matches /api.
+      source += '(?:/.*)?';
+      i += 2;
+      if (glob[i + 1] === '/') i++;
+      continue;
+    }
     if (ch === '*') {
       if (glob[i + 1] === '*') {
         i++;

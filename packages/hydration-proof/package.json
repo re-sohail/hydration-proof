@@ -42,10 +42,13 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./schema/config.json": "./schema/config.json",
+    "./schema/report.json": "./schema/report.json",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
+    "schema",
     "README.md",
     "LICENSE"
   ],

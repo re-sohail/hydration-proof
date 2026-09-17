@@ -42,6 +42,7 @@ export async function parseDocument(
   document: DocumentResponse,
   contextOptions: BrowserContextOptions = {},
   method: ParseMethod = 'csp',
+  ignoreSelectors: readonly string[] = [],
 ): Promise<ParsedDocument> {
   if (document.body === undefined) throw new Error('The document body was not captured.');
   const context = await browser.newContext({
@@ -68,7 +69,9 @@ export async function parseDocument(
     await page.goto(document.url, { waitUntil: 'domcontentloaded' });
     // DevTools evaluation is not subject to the page CSP, and still works
     // with JavaScript disabled.
-    await page.evaluate(runtimeScript({ captureClientView: false, captureWarnings: false }));
+    await page.evaluate(
+      runtimeScript({ captureClientView: false, captureWarnings: false, ignoreSelectors: [...ignoreSelectors] }),
+    );
     await page.evaluate(() => {
       const api = (globalThis as unknown as Record<string, { snapshot(kind: string): number }>)['__HYDRATION_PROOF__'];
       api?.snapshot('manual');

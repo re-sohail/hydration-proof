@@ -5,7 +5,7 @@
 export type Severity = 'error' | 'warning' | 'info';
 
 export interface IssueDefinition {
-  code: string;
+  code: IssueCode;
   /** Kebab-case identifier, stable like the code. */
   name: string;
   title: string;

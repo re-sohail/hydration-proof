@@ -21,6 +21,32 @@ export const OWN_NODE_ATTRIBUTE = 'data-hydration-proof-internal';
 /** Closed shadow roots, recorded by the attachShadow patch. */
 export const closedShadowRoots: WeakMap<Element, ShadowRoot> = new NativeWeakMap();
 
+let ignoreSelectors: string[] = [];
+
+/** Selectors whose elements are marked `ignored`. Invalid selectors are dropped. */
+export function setIgnoreSelectors(selectors: readonly string[]): void {
+  const probe = document.createElement('div');
+  ignoreSelectors = selectors.filter((selector) => {
+    try {
+      probe.matches(selector);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function ignoredBy(el: Element): string | undefined {
+  for (const selector of ignoreSelectors) {
+    try {
+      if (el.matches(selector)) return selector;
+    } catch {
+      // Detached nodes in odd states; treat as not ignored.
+    }
+  }
+  return undefined;
+}
+
 export interface SerializeHooks {
   element?(node: Element, out: SElement): void;
   text?(node: Text, out: SText): void;
@@ -70,6 +96,8 @@ function serializeElement(el: Element, hooks: SerializeHooks): SElement | null {
 
   const form = formState(el);
   if (form) out.form = form;
+  const ignored = ignoreSelectors.length > 0 ? ignoredBy(el) : undefined;
+  if (ignored !== undefined) out.ignored = ignored;
 
   hooks.element?.(el, out);
   return out;

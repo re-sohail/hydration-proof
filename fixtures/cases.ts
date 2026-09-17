@@ -56,13 +56,22 @@ export const PORTS: Record<FixtureApp, { prod: number; dev: number; proxy: numbe
   'next-pages': { prod: 3200, dev: 3210, proxy: 3201 },
 };
 
-// Simulates a translation / grammar extension editing the page before React hydrates.
-const EXTENSION_SCRIPT = `document.addEventListener('DOMContentLoaded', () => {
-  const target = document.getElementById('browser-mutation');
-  if (target && target.firstChild) target.firstChild.data = 'Hola mundo';
-  document.body.setAttribute('data-new-gr-c-s-check-loaded', '14.1250.0');
-  document.body.appendChild(document.createElement('grammarly-desktop-integration'));
-});`;
+// Simulates a translation / grammar extension editing the page before React
+// hydrates. Like real extensions it acts as soon as its target is parsed.
+const EXTENSION_SCRIPT = `(() => {
+  const apply = () => {
+    const target = document.getElementById('browser-mutation');
+    if (!target || !target.firstChild || !document.body) return false;
+    target.firstChild.data = 'Hola mundo';
+    document.body.setAttribute('data-new-gr-c-s-check-loaded', '14.1250.0');
+    document.body.appendChild(document.createElement('grammarly-desktop-integration'));
+    return true;
+  };
+  const observer = new MutationObserver(() => {
+    if (apply()) observer.disconnect();
+  });
+  observer.observe(document, { childList: true, subtree: true });
+})();`;
 
 const TEXT = ['HP1001'];
 

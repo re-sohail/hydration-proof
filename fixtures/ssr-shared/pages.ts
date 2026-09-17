@@ -17,6 +17,8 @@ export interface PageDef {
   stream: boolean;
   /** Extra markup for <head>. */
   head?: string;
+  /** Extra markup at the end of <body>, before the client script. */
+  bodyEnd?: string;
   /** Mount with createRoot instead of hydrateRoot. */
   clientOnly?: boolean;
   App: (props: Record<string, never>) => any;
@@ -130,7 +132,8 @@ export function createPages(React: ReactLike): Record<string, PageDef> {
     },
     'pre-hydration-mutation': {
       stream: false,
-      head: '<script>document.addEventListener("DOMContentLoaded",function(){var p=document.getElementById("target");p.setAttribute("data-extension","1");p.firstChild.data="changed by script"})</script>',
+      // Runs while the page is parsed, before the deferred client script.
+      bodyEnd: '<script>(function(){var p=document.getElementById("target");p.setAttribute("data-extension","1");p.firstChild.data="changed by script"})()</script>',
       App: () => h(Layout, null, h('p', { id: 'target' }, 'original')),
     },
     'noscript-head': {

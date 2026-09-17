@@ -1,0 +1,522 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hydration.jscrate.dev/schema/config.json",
+  "title": "hydration-proof configuration",
+  "description": "hydration-proof configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "configVersion": {
+      "const": 1
+    },
+    "adapter": {
+      "description": "Framework adapter.",
+      "type": "string",
+      "enum": [
+        "auto",
+        "next",
+        "none"
+      ]
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "description": "Start command; {port} is replaced with the port.",
+          "type": "string"
+        },
+        "build": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": false
+            }
+          ]
+        },
+        "buildWhen": {
+          "type": "string",
+          "enum": [
+            "always",
+            "if-missing",
+            "never"
+          ]
+        },
+        "url": {
+          "description": "URL of an app that is already running.",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reuseExisting": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "production",
+            "development"
+          ]
+        }
+      }
+    },
+    "routes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "description": "Path, e.g. /pricing.",
+                    "type": "string"
+                  },
+                  "pattern": {
+                    "description": "Route pattern used for grouping.",
+                    "type": "string"
+                  },
+                  "expectStatus": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 599
+                    }
+                  },
+                  "scenarios": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "ready": {
+                    "description": "When a page counts as ready.",
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "quietMs": {
+                        "description": "Quiet time before the page counts as settled.",
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "timeout": {
+                        "description": "Maximum time per page (ms).",
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "hydrationTimeout": {
+                        "description": "Maximum time for hydration to finish (ms).",
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "selector": {
+                        "description": "Selector that must exist before the final snapshot.",
+                        "type": "string"
+                      },
+                      "function": {
+                        "description": "Page function source that must return truthy.",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            ]
+          }
+        },
+        "dynamic": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "discover": {
+          "type": "boolean"
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "description": "A browser environment routes are tested in.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "Scenario name shown in reports.",
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "timezoneId": {
+            "type": "string"
+          },
+          "colorScheme": {
+            "type": "string",
+            "enum": [
+              "light",
+              "dark",
+              "no-preference"
+            ]
+          },
+          "reducedMotion": {
+            "type": "string",
+            "enum": [
+              "reduce",
+              "no-preference"
+            ]
+          },
+          "viewport": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "width",
+                  "height"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop"
+                ]
+              }
+            ]
+          },
+          "userAgent": {
+            "type": "string"
+          },
+          "storageState": {
+            "description": "Playwright storage state file.",
+            "type": "string"
+          },
+          "cookies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "domain": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "httpOnly": {
+                  "type": "boolean"
+                },
+                "secure": {
+                  "type": "boolean"
+                },
+                "sameSite": {
+                  "type": "string",
+                  "enum": [
+                    "Strict",
+                    "Lax",
+                    "None"
+                  ]
+                }
+              },
+              "required": [
+                "name",
+                "value"
+              ]
+            }
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "localStorage": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "sessionStorage": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "initScripts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "ready": {
+      "description": "When a page counts as ready.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "quietMs": {
+          "description": "Quiet time before the page counts as settled.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeout": {
+          "description": "Maximum time per page (ms).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "hydrationTimeout": {
+          "description": "Maximum time for hydration to finish (ms).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "selector": {
+          "description": "Selector that must exist before the final snapshot.",
+          "type": "string"
+        },
+        "function": {
+          "description": "Page function source that must return truthy.",
+          "type": "string"
+        }
+      }
+    },
+    "browser": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "chromium",
+            "firefox",
+            "webkit"
+          ]
+        },
+        "channel": {
+          "type": "string"
+        },
+        "headless": {
+          "type": "boolean"
+        }
+      }
+    },
+    "workers": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64
+    },
+    "retries": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reactErrors": {
+          "type": "boolean"
+        },
+        "domDiff": {
+          "type": "boolean"
+        },
+        "propsAudit": {
+          "type": "boolean"
+        },
+        "invalidHtml": {
+          "type": "boolean"
+        },
+        "externalChanges": {
+          "type": "boolean"
+        },
+        "suppressedWarnings": {
+          "type": "string",
+          "enum": [
+            "off",
+            "info",
+            "strict"
+          ]
+        }
+      }
+    },
+    "ignore": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "attributes": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string",
+                "format": "regex",
+                "description": "A RegExp (JavaScript/TypeScript configs only) or a regular expression source string."
+              }
+            ]
+          }
+        },
+        "textPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "regex",
+            "description": "A RegExp (JavaScript/TypeScript configs only) or a regular expression source string."
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "route": {
+                "type": "string"
+              },
+              "fingerprint": {
+                "type": "string"
+              },
+              "selector": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "expires": {
+                "description": "ISO date (YYYY-MM-DD).",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ]
+          }
+        }
+      }
+    },
+    "reporters": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "list",
+          "json",
+          "html",
+          "junit",
+          "sarif",
+          "github",
+          "gitlab"
+        ]
+      }
+    },
+    "outputDir": {
+      "type": "string"
+    },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "failOn": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "info",
+            "never"
+          ]
+        },
+        "maxWarnings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "baseline": {
+          "type": "string"
+        },
+        "newIssuesOnly": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

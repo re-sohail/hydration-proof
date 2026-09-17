@@ -6,7 +6,8 @@
   "scripts": {
     "build": "next build",
     "start": "next start -p ${PORT:-3100}",
-    "dev": "next dev -p ${PORT:-3100}"
+    "dev": "next dev -p ${PORT:-3100}",
+    "hydration-proof": "hydration-proof test"
   },
   "dependencies": {
     "@fixtures/next-cases": "workspace:*",
@@ -18,5 +19,8 @@
     "@fixtures/next-cases": {
       "injected": true
     }
+  },
+  "devDependencies": {
+    "hydration-proof": "workspace:*"
   }
 }

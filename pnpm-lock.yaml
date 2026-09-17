@@ -40,6 +40,10 @@ importers:
     dependenciesMeta:
       '@fixtures/next-cases':
         injected: true
+    devDependencies:
+      hydration-proof:
+        specifier: workspace:*
+        version: link:../../packages/hydration-proof
 
   fixtures/next-cases:
     dependencies:
@@ -70,6 +74,10 @@ importers:
     dependenciesMeta:
       '@fixtures/next-cases':
         injected: true
+    devDependencies:
+      hydration-proof:
+        specifier: workspace:*
+        version: link:../../packages/hydration-proof
 
   fixtures/ssr-react18:
     dependencies:

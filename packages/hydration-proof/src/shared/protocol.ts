@@ -78,6 +78,8 @@ export interface SElement {
   client?: ClientView;
   /** Name of the component that rendered this host element, when known. */
   owner?: string;
+  /** Set when the element matched an ignore selector (the selector). */
+  ignored?: string;
 }
 
 export interface SText {
@@ -307,6 +309,8 @@ export interface RuntimeOptions {
   captureClientView: boolean;
   /** Capture console.warn in addition to console.error. */
   captureWarnings: boolean;
+  /** Elements matching these selectors are marked as ignored in snapshots. */
+  ignoreSelectors: string[];
 }
 
 export const DEFAULT_RUNTIME_OPTIONS: RuntimeOptions = {
@@ -314,6 +318,7 @@ export const DEFAULT_RUNTIME_OPTIONS: RuntimeOptions = {
   maxErrors: 500,
   captureClientView: true,
   captureWarnings: true,
+  ignoreSelectors: ['[data-hydration-proof-ignore]'],
 };
 
 /** The object the runtime installs at `window[RUNTIME_GLOBAL]`. */

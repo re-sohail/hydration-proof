@@ -13,6 +13,9 @@ export interface ScenarioSpec {
   sessionStorage?: Record<string, string>;
   /** Extra scripts injected before page scripts (after the hydration-proof runtime). */
   initScripts?: string[];
+  /** Cookies added before navigation; cookies without a domain use `cookieUrl`. */
+  cookies?: { name: string; value: string; domain?: string; path?: string; httpOnly?: boolean; secure?: boolean; sameSite?: 'Strict' | 'Lax' | 'None' }[];
+  cookieUrl?: string;
 }
 
 /** Context options that affect how the server bytes are parsed (stage 2). */
@@ -41,5 +44,14 @@ export async function createScenarioContext(
     await context.addInitScript({ content: storageScript('sessionStorage', scenario.sessionStorage) });
   }
   for (const script of scenario.initScripts ?? []) await context.addInitScript({ content: script });
+  if (scenario.cookies?.length) {
+    await context.addCookies(
+      scenario.cookies.map((cookie) =>
+        cookie.domain !== undefined
+          ? { ...cookie, domain: cookie.domain, path: cookie.path ?? '/' }
+          : { name: cookie.name, value: cookie.value, url: scenario.cookieUrl ?? 'http://localhost', ...(cookie.httpOnly !== undefined ? { httpOnly: cookie.httpOnly } : {}), ...(cookie.secure !== undefined ? { secure: cookie.secure } : {}), ...(cookie.sameSite !== undefined ? { sameSite: cookie.sameSite } : {}) },
+      ),
+    );
+  }
   return context;
 }

@@ -27,6 +27,8 @@ export interface Draft {
   related?: string[];
   /** Anchors of elements inside an inserted or removed subtree. */
   nodeAnchors?: string[];
+  /** The ignore selector of an enclosing element. */
+  ignoredBy?: string;
 }
 
 export interface Locator {
@@ -42,28 +44,35 @@ export interface Location {
   selector: string;
   domPath: string[];
   anchor: string;
+  ignoredBy?: string;
 }
 
 export function locate(where: Locator, id: number | undefined): Location | undefined {
   if (id === undefined || !where.index.has(id)) return undefined;
   const selector = cssSelector(where.index, id, where.counts);
-  let anchor = selector;
+  let anchor: string | undefined;
+  let ignoredBy: string | undefined;
   let current = where.index.get(id);
   while (current) {
     if (isElement(current.node)) {
-      const elId = getAttr(current.node, 'id');
-      if (elId && where.counts.get(elId) === 1) {
-        anchor = `#${elId}`;
-        break;
+      if (anchor === undefined) {
+        const elId = getAttr(current.node, 'id');
+        if (elId && where.counts.get(elId) === 1) anchor = `#${elId}`;
       }
+      ignoredBy ??= current.node.ignored;
     }
     current = current.parent ? where.index.get(current.parent.id) : undefined;
   }
-  return { selector, domPath: domPath(where.index, id), anchor };
+  const location: Location = { selector, domPath: domPath(where.index, id), anchor: anchor ?? selector };
+  if (ignoredBy !== undefined) location.ignoredBy = ignoredBy;
+  return location;
 }
 
 export function placed(draft: Omit<Draft, 'selector' | 'domPath' | 'anchor'>, location: Location | undefined): Draft {
-  return location ? { ...draft, selector: location.selector, domPath: location.domPath, anchor: location.anchor } : draft;
+  if (!location) return draft;
+  const out: Draft = { ...draft, selector: location.selector, domPath: location.domPath, anchor: location.anchor };
+  if (location.ignoredBy !== undefined) out.ignoredBy = location.ignoredBy;
+  return out;
 }
 
 export function clip(value: string | null | undefined, max = 300): string | null | undefined {

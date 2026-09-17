@@ -21,10 +21,10 @@ const SEPARATOR = '\n';
 export function stableSelector(selector: string): string {
   return (
     selector
-      // React useId output: :r1:, «r1», _r_1_ (escaped or not)
-      .replace(/(?:\\?:|«|_)r[0-9a-z]+(?:\\?:|»|_)/gi, 'r*')
-      // Hashed CSS-in-JS / CSS module suffixes
-      .replace(/[_-][a-z0-9]{5,}(?=$|[\s>.#:[])/gi, '')
+      // React useId output: :R1: / :r1: (18), «r1» (19.1), _R_1_ (19.2+), escaped or not
+      .replace(/(?:\\?:|«)[rR][0-9a-zA-Z]*(?:\\?:|»)|_[rR]_[0-9a-zA-Z]*_/g, 'r*')
+      // Hashed CSS-in-JS / CSS module suffixes (letters and digits mixed)
+      .replace(/[_-](?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{5,}(?=$|[\s>.#:[])/gi, '')
   );
 }
 

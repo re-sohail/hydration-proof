@@ -30,6 +30,8 @@ export interface HydrationInput {
   normalize: NormalizeOptions;
   /** Report suppressHydrationWarning with nothing to suppress. */
   reportUnusedSuppression: boolean;
+  /** Compare reused elements with the props React renders. */
+  propsAudit: boolean;
 }
 
 export interface HydrationEvent {
@@ -224,9 +226,15 @@ function classifyChange(
   }
 }
 
-function auditElement(post: SElement, pre: SElement, event: HydrationEvent, report: boolean): Draft[] {
+function attributeIgnored(name: string, patterns: NormalizeOptions['ignoreAttributes']): boolean {
+  const lower = name.toLowerCase();
+  return patterns.some((pattern) => (typeof pattern === 'string' ? pattern.toLowerCase() === lower : pattern.test(lower)));
+}
+
+function auditElement(post: SElement, pre: SElement, event: HydrationEvent, report: boolean, normalize: NormalizeOptions): Draft[] {
   const client = post.client;
   if (!client || client.opaque !== undefined) return [];
+  const ignoredAttribute = (name: string): boolean => attributeIgnored(name, normalize.ignoreAttributes) || attributeIgnored(name, normalize.maskAttributes);
   const drafts: Draft[] = [];
   const suppressed = client.suppress === true;
   const location = locate(event.postLocator, post.id);
@@ -243,6 +251,7 @@ function auditElement(post: SElement, pre: SElement, event: HydrationEvent, repo
 
   const skipped = new Set(client.skipped ?? []);
   for (const [name, expected] of Object.entries(client.attrs)) {
+    if (ignoredAttribute(name)) continue;
     const server = getAttr(pre, name);
     if (server !== getAttr(post, name)) continue; // changed during the commit: an effect, not a mismatch
     const equal = BOOLEAN_ATTRIBUTES.has(name.toLowerCase())
@@ -263,6 +272,7 @@ function auditElement(post: SElement, pre: SElement, event: HydrationEvent, repo
   for (const [name, server] of pre.attrs) {
     const lower = name.toLowerCase();
     if (!isAuditedAttribute(lower) || lower in client.attrs || skipped.has(lower) || skipped.has(name)) continue;
+    if (ignoredAttribute(lower)) continue;
     if (lower === 'style' && client.style !== undefined) continue;
     if (server !== getAttr(post, name)) continue;
     emit(attributeCode(lower, server, null), {
@@ -435,12 +445,13 @@ export function analyzeHydration(input: HydrationInput): HydrationResult {
       );
     }
 
+    if (!input.propsAudit) continue;
     walk(postTree, (node) => {
       if (!isElement(node) || audited.has(node.id)) return;
       const preNode = pre.get(node.id)?.node;
       if (!isElement(preNode) || !node.client) return;
       audited.add(node.id);
-      drafts.push(...auditElement(node, preNode, event, input.reportUnusedSuppression));
+      drafts.push(...auditElement(node, preNode, event, input.reportUnusedSuppression, input.normalize));
     });
   }
   return { drafts, events };
