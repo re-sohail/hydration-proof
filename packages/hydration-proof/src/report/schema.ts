@@ -94,6 +94,8 @@ const page = s.object(
     issues: s.array(s.string()),
     counts,
     mode: s.enum(['production', 'development']),
+    serverLogs: s.array(s.string()),
+    source: s.enum(['config', 'discovered', 'manifest', 'sitemap', 'crawl', 'not-found']),
     timeline: s.array(
       s.object(
         {

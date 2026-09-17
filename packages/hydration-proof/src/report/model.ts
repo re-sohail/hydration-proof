@@ -130,6 +130,10 @@ export interface PageResult {
   mode?: 'production' | 'development';
   timeline?: TimelineEntry[];
   screenshots?: Screenshots;
+  /** Error and warning lines the app server printed while this page loaded. */
+  serverLogs?: string[];
+  /** How the route was found. */
+  source?: 'config' | 'discovered' | 'manifest' | 'sitemap' | 'crawl' | 'not-found';
 }
 
 export interface RunInfo {
