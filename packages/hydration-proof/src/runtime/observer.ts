@@ -2,7 +2,7 @@ import type { BatchPhase, MutationBatch, MutationEntry, SNode } from '../shared/
 import { closedShadowRoots, OWN_NODE_ATTRIBUTE, serializeNode } from './serialize.ts';
 import { defineProperty, nativeAttachShadow, NativeMutationObserver, now } from './env.ts';
 import { idOf, knownId } from './ids.ts';
-import { describeNode } from './selector.ts';
+import { describeNode, isToolingNode } from './selector.ts';
 
 const OBSERVE: MutationObserverInit = {
   childList: true,
@@ -80,7 +80,7 @@ export class MutationLog {
     const patched = function attachShadow(this: Element, init: ShadowRootInit): ShadowRoot {
       const root = nativeAttachShadow.call(this, init);
       if (init.mode === 'closed') closedShadowRoots.set(this, root);
-      observer.observe(root, OBSERVE);
+      if (!isToolingNode(this)) observer.observe(root, OBSERVE);
       return root;
     };
     defineProperty(Element.prototype, 'attachShadow', {

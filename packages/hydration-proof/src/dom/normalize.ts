@@ -79,6 +79,18 @@ export const genericMarkers: MarkerRule[] = [
     id: 'hydration-proof-internal',
     match: (node) => (isElement(node) && getAttr(node, 'data-hydration-proof-internal') !== null ? 'drop' : undefined),
   },
+  {
+    // Framework dev overlays mount into (script) hosts at the end of <body>.
+    id: 'dev-tooling',
+    match: (node) =>
+      isElement(node) &&
+      (node.tag === 'nextjs-portal' ||
+        node.tag === 'vite-error-overlay' ||
+        getAttr(node, 'data-nextjs-dev-overlay') !== null ||
+        (node.tag === 'script' && node.children.some((child) => isElement(child) && child.tag === 'nextjs-portal')))
+        ? 'drop'
+        : undefined,
+  },
 ];
 
 function matches(name: string, patterns: readonly (string | RegExp)[]): boolean {

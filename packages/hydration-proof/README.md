@@ -7,20 +7,25 @@ Find React hydration problems before your users do.
 **[Documentation](https://hydration.jscrate.dev)** · [Issue codes](https://github.com/re-sohail/hydration-proof/blob/main/docs/issues.md) · [CLI](https://github.com/re-sohail/hydration-proof/blob/main/docs/cli.md) · [Configuration](https://github.com/re-sohail/hydration-proof/blob/main/docs/configuration.md) · [CI](https://github.com/re-sohail/hydration-proof/blob/main/docs/ci.md)
 
 ```text
-Hydration Proof — 20 pages on http://127.0.0.1:53744
+Hydration Proof — 20 pages on http://localhost:3000
 
   ✓ /pricing 684ms
   ✖ /dashboard 1.1s  1 error
-    HP1001 Text differs between server and client
+    HP1001 Text differs between server and client  (timezone difference, 95%)
       #last-login  in LastLogin
-      server: "Signed in 17 Sep 2026, 05:00"
-      client: "Signed in 17 Sep 2026, 10:00"
+      server: "Signed in at 5:00 AM"
+      client: "Signed in at 10:00 AM"
+      app/dashboard/LastLogin.tsx:14:10
+      → Pass an explicit timeZone to the formatter (the same on both sides), or format the date after mount.
   ✖ /settings 687ms  1 error
-    HP1004 Class name differs between server and client
+    HP1004 Class name differs between server and client  (theme preference (dark/light mode), 99%)
       #theme  in ThemePreview
       attribute: class
       server: "theme-light"
       client: "theme-dark"
+      app/settings/ThemePreview.tsx:9:5
+
+  Report: .hydration-proof/report/report.html
 ```
 
 ## Why
@@ -44,7 +49,7 @@ The browser console only shows a minified error code in production, and nothing 
 | **`suppressHydrationWarning`** | Differences hidden by it are listed as info, so you know what you are suppressing. |
 | **React's own reports** | Recoverable errors, component stacks and warnings from React 18 and 19, development and production. |
 
-Every finding has a [stable code](https://github.com/re-sohail/hydration-proof/blob/main/docs/issues.md), the CSS selector of the element, the server and client values, and a suggested fix.
+Every finding has a [stable code](https://github.com/re-sohail/hydration-proof/blob/main/docs/issues.md), the CSS selector of the element, the server and client values, the component and **the line in your code**, the [likely cause](https://github.com/re-sohail/hydration-proof/blob/main/docs/causes.md) (time, timezone, locale, random values, browser storage, media queries, theme, data, CSS-in-JS, extensions, CDNs, ...) with a confidence score, and a fix for that cause.
 
 ## Install
 
@@ -63,6 +68,14 @@ npx hydration-proof test
 ```
 
 For a Next.js app, that is all: static routes are discovered from `app/` and `pages/`, the app is built (if needed) and started on a free port, every route is tested, and the process exits with code 1 if something is wrong.
+
+Open `.hydration-proof/report/report.html` for the full picture: filters, the server and client values side by side, the code, screenshots with the affected elements outlined, and a timeline of the page. See [reports](https://github.com/re-sohail/hydration-proof/blob/main/docs/reports.md).
+
+Development builds give exact source lines; production builds show what your users get. Test both in one run:
+
+```bash
+npx hydration-proof test --mode both
+```
 
 To test an app that is already running:
 

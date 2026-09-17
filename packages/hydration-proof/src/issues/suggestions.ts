@@ -57,6 +57,10 @@ const SUGGESTIONS: Partial<Record<IssueCode, string[]>> = {
   HP9004: ['Check that the server is running and the URL is correct.'],
   HP9005: ['Make the route return a success status, or list the status in the route\'s expected statuses.'],
   HP9009: ['Increase ready.quietMs/timeout or provide ready.selector for pages with continuous updates.'],
+  HP9010: [
+    'If the redirect is intended, set expectRedirect on the route, or limit the route to the scenarios that can open it (scenario include/exclude).',
+    'For signed-in scenarios, check the login step or the storage state file.',
+  ],
 };
 
 export function suggestionsFor(code: IssueCode): string[] {

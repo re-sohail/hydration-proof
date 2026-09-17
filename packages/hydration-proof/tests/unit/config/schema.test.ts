@@ -19,7 +19,8 @@ const everything: Required<HydrationProofConfig> = {
     env: { FOO: 'bar' },
     timeout: 60_000,
     reuseExisting: true,
-    mode: 'production',
+    mode: 'both',
+    devCommand: 'npm run dev -- --port {port}',
   },
   routes: {
     paths: ['/', { path: '/404-page', pattern: '/404-page', expectStatus: [404], scenarios: ['default'], ready: { quietMs: 10 } }],
@@ -66,6 +67,7 @@ const everything: Required<HydrationProofConfig> = {
   },
   reporters: ['list', 'json'],
   outputDir: 'out',
+  screenshots: 'all',
   ci: { failOn: 'warning', maxWarnings: 3, baseline: 'baseline.json', newIssuesOnly: true },
 };
 

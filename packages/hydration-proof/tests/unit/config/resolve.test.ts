@@ -16,7 +16,8 @@ describe('resolveConfig', () => {
     expect(config.retries).toBe(0);
     expect(config.routes.exclude).toEqual(['/api/**']);
     expect(config.ignore.selectors).toEqual([DEFAULT_IGNORE_SELECTOR]);
-    expect(config.reporters).toEqual(['list', 'json']);
+    expect(config.reporters).toEqual(['list', 'json', 'html']);
+    expect(config.screenshots).toBe('failures');
     expect(config.outputDir).toBe('/project/.hydration-proof/report');
     expect(config.ci.failOn).toBe('error');
   });

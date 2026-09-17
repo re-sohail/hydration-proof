@@ -35,12 +35,24 @@ function matchesSelector(issue: Issue, selector: string): boolean {
   return issue.selector === selector || issue.selector.startsWith(`${selector} `);
 }
 
-export function judge(entry: FixtureCase, issues: Issue[]): Verdict {
+export interface JudgeOptions {
+  /** Also require the expected cause. */
+  cause?: boolean;
+  /** Also require the expected source file and line. */
+  source?: boolean;
+  /** Reads a source file for line checks. */
+  readLine?: (file: string, line: number) => string | undefined;
+}
+
+export function judge(entry: FixtureCase, issues: Issue[], options: JudgeOptions = {}): Verdict {
   const active = issues.filter((issue) => !issue.ignored);
   const summary = active.map((issue) => `${issue.code}${issue.selector ? `@${issue.selector}` : ''}`).join(', ') || 'none';
   if (entry.kind === 'control') {
     const bad = active.filter((issue) => issue.severity !== 'info');
-    return { ok: bad.length === 0, detail: bad.length === 0 ? `clean (${summary})` : `false positive: ${summary}` };
+    return {
+      ok: bad.length === 0,
+      detail: bad.length === 0 ? `clean (${summary})` : `false positive: ${summary} — ${bad.map((issue) => issue.message).join(' | ')}`,
+    };
   }
   const expect = entry.expect!;
   const hit = active.find(
@@ -49,5 +61,24 @@ export function judge(entry: FixtureCase, issues: Issue[]): Verdict {
       expect.anyOfCodes.includes(issue.code) &&
       (expect.selector === undefined || matchesSelector(issue, expect.selector)),
   );
-  return { ok: hit !== undefined, detail: hit ? `found ${hit.code}@${hit.selector ?? '-'} (${summary})` : `missed; got ${summary}` };
+  if (!hit) return { ok: false, detail: `missed; got ${summary}` };
+  const parts = [`found ${hit.code}@${hit.selector ?? '-'}`];
+  if (options.cause && expect.cause) {
+    if (!hit.cause || !expect.cause.includes(hit.cause.id)) {
+      return { ok: false, detail: `wrong cause ${hit.cause?.id ?? 'none'} (expected ${expect.cause.join('/')})` };
+    }
+    parts.push(`cause ${hit.cause.id} ${Math.round(hit.cause.confidence * 100)}%`);
+  }
+  if (options.source && expect.source) {
+    const source = hit.source;
+    if (!source || !source.file.endsWith(expect.source.file)) {
+      return { ok: false, detail: `wrong source ${source ? `${source.file}:${source.line}` : `none (${hit.sourceUnavailableReason})`}` };
+    }
+    const line = options.readLine?.(source.file, source.line) ?? '';
+    if (!line.includes(expect.source.contains)) {
+      return { ok: false, detail: `source ${source.file}:${source.line} is "${line.trim()}", expected it to contain ${expect.source.contains}` };
+    }
+    parts.push(`${source.file}:${source.line}`);
+  }
+  return { ok: true, detail: `${parts.join(', ')} (${summary})` };
 }

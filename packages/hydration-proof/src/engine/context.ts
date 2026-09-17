@@ -1,4 +1,5 @@
-import type { Browser, BrowserContext, BrowserContextOptions } from 'playwright-core';
+import type { Browser, BrowserContext, BrowserContextOptions, Route } from 'playwright-core';
+import type { MockConfig } from '../config/types.ts';
 import type { RuntimeOptions } from '../shared/protocol.ts';
 import { runtimeScript } from './runtime-loader.ts';
 
@@ -16,6 +17,23 @@ export interface ScenarioSpec {
   /** Cookies added before navigation; cookies without a domain use `cookieUrl`. */
   cookies?: { name: string; value: string; domain?: string; path?: string; httpOnly?: boolean; secure?: boolean; sameSite?: 'Strict' | 'Lax' | 'None' }[];
   cookieUrl?: string;
+  /** Browser request fixtures. */
+  mocks?: MockConfig[];
+}
+
+function mockHandler(mock: MockConfig): (route: Route) => Promise<void> {
+  return async (route) => {
+    if (mock.method !== undefined && route.request().method().toUpperCase() !== mock.method.toUpperCase()) {
+      await route.fallback();
+      return;
+    }
+    const json = mock.body !== undefined && typeof mock.body !== 'string' && !(mock.body instanceof Uint8Array);
+    await route.fulfill({
+      status: mock.status ?? 200,
+      headers: { ...(json ? { 'content-type': 'application/json' } : {}), ...mock.headers },
+      body: mock.body === undefined ? '' : json ? JSON.stringify(mock.body) : (mock.body as string),
+    });
+  };
 }
 
 /** Context options that affect how the server bytes are parsed (stage 2). */
@@ -44,6 +62,7 @@ export async function createScenarioContext(
     await context.addInitScript({ content: storageScript('sessionStorage', scenario.sessionStorage) });
   }
   for (const script of scenario.initScripts ?? []) await context.addInitScript({ content: script });
+  for (const mock of scenario.mocks ?? []) await context.route(mock.url, mockHandler(mock));
   if (scenario.cookies?.length) {
     await context.addCookies(
       scenario.cookies.map((cookie) =>

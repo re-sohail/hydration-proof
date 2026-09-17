@@ -37,7 +37,7 @@ const issue = s.object(
       ['file', 'line'],
     ),
     sourceUnavailableReason: s.string(),
-    cause: s.object({ id: s.string(), title: s.string(), confidence: s.number() }, undefined, ['id', 'title', 'confidence']),
+    cause: s.object({ id: s.string(), title: s.string(), confidence: s.number(), docsUrl: s.string() }, undefined, ['id', 'title', 'confidence']),
     evidence: s.array(
       s.object(
         {
@@ -53,6 +53,8 @@ const issue = s.object(
     docsUrl: s.string(),
     ignored: s.object({ reason: s.string(), rule: s.string() }, undefined, ['reason', 'rule']),
     suppressed: s.boolean(),
+    excerpt: s.object({ server: s.string(), client: s.string() }),
+    mode: s.enum(['production', 'development']),
   },
   'One finding.',
   ['fingerprint', 'code', 'title', 'severity', 'confidence', 'message', 'route', 'scenario', 'stage', 'evidence', 'suggestions', 'docsUrl'],
@@ -91,6 +93,36 @@ const page = s.object(
     ),
     issues: s.array(s.string()),
     counts,
+    mode: s.enum(['production', 'development']),
+    timeline: s.array(
+      s.object(
+        {
+          time: s.number(),
+          kind: s.enum(['renderer', 'commit', 'error', 'mutation', 'stream', 'effects', 'snapshot']),
+          label: s.string(),
+          detail: s.string(),
+        },
+        undefined,
+        ['time', 'kind', 'label'],
+      ),
+    ),
+    screenshots: s.object(
+      {
+        hydrated: s.string(),
+        server: s.string(),
+        width: s.number(),
+        height: s.number(),
+        boxes: s.array(
+          s.object(
+            { fingerprint: s.string(), x: s.number(), y: s.number(), width: s.number(), height: s.number() },
+            undefined,
+            ['fingerprint', 'x', 'y', 'width', 'height'],
+          ),
+        ),
+      },
+      undefined,
+      ['width', 'height', 'boxes'],
+    ),
   },
   'One route tested in one scenario.',
   ['id', 'route', 'scenario', 'url', 'finalUrl', 'status', 'outcome', 'timings', 'issues', 'counts'],

@@ -303,6 +303,102 @@
               "warning",
               "info"
             ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "production",
+              "development"
+            ]
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "time": {
+                  "type": "number"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "renderer",
+                    "commit",
+                    "error",
+                    "mutation",
+                    "stream",
+                    "effects",
+                    "snapshot"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "time",
+                "kind",
+                "label"
+              ]
+            }
+          },
+          "screenshots": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "hydrated": {
+                "type": "string"
+              },
+              "server": {
+                "type": "string"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
+              "boxes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "fingerprint": {
+                      "type": "string"
+                    },
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "width": {
+                      "type": "number"
+                    },
+                    "height": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "fingerprint",
+                    "x",
+                    "y",
+                    "width",
+                    "height"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "width",
+              "height",
+              "boxes"
+            ]
           }
         },
         "required": [
@@ -502,6 +598,9 @@
               },
               "confidence": {
                 "type": "number"
+              },
+              "docsUrl": {
+                "type": "string"
               }
             },
             "required": [
@@ -570,6 +669,25 @@
           },
           "suppressed": {
             "type": "boolean"
+          },
+          "excerpt": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "server": {
+                "type": "string"
+              },
+              "client": {
+                "type": "string"
+              }
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "production",
+              "development"
+            ]
           }
         },
         "required": [

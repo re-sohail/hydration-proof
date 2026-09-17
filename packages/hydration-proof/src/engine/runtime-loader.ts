@@ -6,6 +6,8 @@ import {
   RUNTIME_GLOBAL,
   RUNTIME_OPTIONS_GLOBAL,
   type DrainPayload,
+  type NodeRect,
+  type NodeSource,
   type RuntimeOptions,
   type RuntimeStatus,
   type SnapshotKind,
@@ -61,4 +63,26 @@ export async function requestSnapshot(page: Page, kind: SnapshotKind): Promise<n
     },
     [RUNTIME_GLOBAL, kind] as const,
   );
+}
+
+export async function nodeSources(page: Page, ids: number[]): Promise<NodeSource[]> {
+  if (ids.length === 0) return [];
+  return page.evaluate(
+    ([key, list]) => {
+      const api = (globalThis as unknown as Record<string, { sources(ids: number[]): unknown } | undefined>)[key];
+      return api ? api.sources(list) : [];
+    },
+    [RUNTIME_GLOBAL, ids] as const,
+  ) as Promise<NodeSource[]>;
+}
+
+export async function nodeRects(page: Page, ids: number[]): Promise<NodeRect[]> {
+  if (ids.length === 0) return [];
+  return page.evaluate(
+    ([key, list]) => {
+      const api = (globalThis as unknown as Record<string, { rects(ids: number[]): unknown } | undefined>)[key];
+      return api ? api.rects(list) : [];
+    },
+    [RUNTIME_GLOBAL, ids] as const,
+  ) as Promise<NodeRect[]>;
 }

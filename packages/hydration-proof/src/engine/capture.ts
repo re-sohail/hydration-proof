@@ -32,6 +32,9 @@ export interface ReadyOptions {
   readyFunction?: string;
 }
 
+/** Quiet time after which boundaries that only wait for React count as stalled. */
+const STALL_QUIET_MS = 2_000;
+
 export const DEFAULT_READY: ReadyOptions = {
   quietMs: 400,
   effectQuietMs: 60,
@@ -56,6 +59,8 @@ export interface DocumentResponse extends HttpExchange {
 
 export type CaptureOutcome =
   | 'hydrated'
+  /** Hydration finished except for boundaries React left for later (content is there). */
+  | 'hydration-stalled'
   | 'client-only'
   | 'no-react'
   | 'no-root'
@@ -85,6 +90,8 @@ export interface BrowserMessage {
 }
 
 export interface PageCapture {
+  /** Epoch milliseconds when loading started. */
+  startedAt: number;
   requestedUrl: string;
   finalUrl: string;
   outcome: CaptureOutcome;
@@ -241,10 +248,20 @@ async function waitForHydration(page: Page, options: ReadyOptions, deadline: num
     const status = await poller.poll();
     if (status !== undefined) {
       if (status.hydration === 'done') return 'hydrated';
-      if (status.hydration === 'client-only' && status.roots > 0 && poller.loadedAt !== undefined) return 'client-only';
       if (status.renderers > 0) reactSeenAt ??= Date.now();
       const loadedFor = poller.loadedAt === undefined ? 0 : Date.now() - poller.loadedAt;
+      // A client root may mount before the hydrating one; wait a little first.
+      if (status.hydration === 'client-only' && status.roots > 0 && loadedFor > options.noReactGrace) return 'client-only';
       if (status.renderers === 0 && loadedFor > options.noReactGrace) return 'no-react';
+      if (
+        status.hydration === 'hydrating' &&
+        status.pendingBoundaries > 0 &&
+        status.pendingWithContent === status.pendingBoundaries &&
+        loadedFor > 0 &&
+        poller.quietFor() > STALL_QUIET_MS
+      ) {
+        return 'hydration-stalled';
+      }
       if (status.renderers > 0 && status.roots === 0 && loadedFor > options.noReactGrace * 2) return 'no-root';
       if (reactSeenAt !== undefined && Date.now() - reactSeenAt > options.hydrationTimeout) return 'hydration-timeout';
     }
@@ -297,6 +314,11 @@ async function drainInto(page: Page, runtime: RuntimeData): Promise<void> {
   }
 }
 
+export interface CaptureHooks {
+  /** Runs after the final snapshot, while the page is still open. */
+  beforeClose?(page: Page, capture: PageCapture): Promise<void>;
+}
+
 /**
  * Load `url` in a fresh page of `context` (which must already carry the
  * runtime init script) and capture every stage the runtime can see.
@@ -305,6 +327,7 @@ export async function capturePage(
   context: BrowserContext,
   url: string,
   options: ReadyOptions = DEFAULT_READY,
+  hooks: CaptureHooks = {},
 ): Promise<PageCapture> {
   const started = Date.now();
   const deadline = started + options.timeout;
@@ -331,6 +354,7 @@ export async function capturePage(
 
   const runtime = emptyRuntime();
   const capture: PageCapture = {
+    startedAt: started,
     requestedUrl: url,
     finalUrl: url,
     outcome: 'navigation-failed',
@@ -357,7 +381,7 @@ export async function capturePage(
     }
     await drainInto(page, runtime);
 
-    if (capture.outcome === 'hydrated') {
+    if (capture.outcome === 'hydrated' || capture.outcome === 'hydration-stalled') {
       await waitForQuiet(page, options.effectQuietMs, options.pollMs, deadline);
       const seq = await snapshotNow(page, 'post-effect');
       if (seq !== undefined) capture.postEffectSnapshot = seq;
@@ -372,6 +396,8 @@ export async function capturePage(
 
     capture.finalUrl = page.url();
     if (documentPromise) capture.document = await documentPromise;
+    capture.timings.total = Date.now() - started;
+    await hooks.beforeClose?.(page, capture);
     return capture;
   } finally {
     capture.timings.total = Date.now() - started;

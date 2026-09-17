@@ -6,13 +6,14 @@ import { isElement, walk } from '../dom/tree.ts';
 import { fingerprint } from '../issues/fingerprint.ts';
 import { docsUrl, issueDefinition, type Severity } from '../issues/registry.ts';
 import { suggestionsFor } from '../issues/suggestions.ts';
-import type { Issue, PageStatus, ReactInfo, RouteRef } from '../report/model.ts';
+import type { Issue, PageStatus, ReactInfo, RouteRef, TimelineEntry } from '../report/model.ts';
 import type { Draft } from './draft.ts';
 import { analyzeErrors, isWarningKind, standaloneDraft, type ReactReport } from './errors.ts';
 import { analyzeExternal } from './external.ts';
 import { analyzeHydration } from './hydration.ts';
 import { analyzeMarkup } from './markup.ts';
 import { analyzeOutcome } from './outcome.ts';
+import { buildTimeline } from './timeline.ts';
 
 export interface AnalyzeOptions {
   route: RouteRef;
@@ -24,12 +25,17 @@ export interface AnalyzeOptions {
   expectedStatuses?: readonly number[];
   /** Compare attributes and text with what React renders on the client. Default true. */
   propsAudit?: boolean;
+  /** The path the route must redirect to. */
+  expectRedirect?: string;
 }
 
 export interface PageAnalysis {
   issues: Issue[];
   status: PageStatus;
   react?: ReactInfo;
+  /** Issue fingerprint -> element id in the live page. */
+  nodes: Map<string, number>;
+  timeline: TimelineEntry[];
 }
 
 const STRUCTURAL = new Set(['HP1001', 'HP1007', 'HP1008', 'HP1009', 'HP1015', 'HP1010', 'HP1011']);
@@ -165,6 +171,7 @@ function toIssue(draft: Draft, options: AnalyzeOptions, production: boolean): Is
   if (component !== undefined) issue.component = component;
   if (draft.componentStack !== undefined) issue.componentStack = draft.componentStack;
   if (draft.suppressed) issue.suppressed = true;
+  if (draft.excerpt && (draft.excerpt.server !== undefined || draft.excerpt.client !== undefined)) issue.excerpt = draft.excerpt;
   if (draft.ignoredBy !== undefined) {
     issue.ignored = { reason: `Inside an element matching ${draft.ignoredBy}.`, rule: 'ignore.selectors' };
   }
@@ -202,25 +209,32 @@ export function pageStatus(capture: PageCapture, issues: Issue[]): PageStatus {
   return 'passed';
 }
 
+/** The renderer the app hydrates with (dev tooling may bring its own React). */
+export function appRenderer(capture: PageCapture): PageCapture['runtime']['renderers'][number] | undefined {
+  const { renderers, roots } = capture.runtime;
+  const appRoot = roots.find((root) => !root.tooling && root.mode === 'hydrate') ?? roots.find((root) => !root.tooling);
+  return renderers.find((renderer) => renderer.id === appRoot?.rendererId) ?? renderers[0];
+}
+
 function reactInfo(capture: PageCapture): ReactInfo | undefined {
-  const renderer = capture.runtime.renderers[0];
+  const renderer = appRenderer(capture);
   if (!renderer) return undefined;
   return {
     version: renderer.version,
     build: renderer.bundleType === 0 ? 'production' : renderer.bundleType === 1 ? 'development' : 'unknown',
-    roots: capture.runtime.roots.map((root) => ({ selector: root.containerSelector, mode: root.mode })),
+    roots: capture.runtime.roots.filter((root) => !root.tooling).map((root) => ({ selector: root.containerSelector, mode: root.mode })),
   };
 }
 
 export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undefined, options: AnalyzeOptions): PageAnalysis {
   const normalize = options.normalize ?? DEFAULT_NORMALIZE;
   const { runtime } = capture;
-  const drafts: Draft[] = [...analyzeOutcome(capture, options.expectedStatuses ?? [])];
+  const drafts: Draft[] = [...analyzeOutcome(capture, options.expectedStatuses ?? [], options.expectRedirect)];
 
   const errorAnalysis = analyzeErrors(runtime.errors);
   drafts.push(...errorAnalysis.drafts);
 
-  const containers = new Set(runtime.roots.map((root) => root.container));
+  const containers = new Set(runtime.roots.filter((root) => !root.tooling).map((root) => root.container));
   const hydration = analyzeHydration({
     commits: runtime.commits,
     batches: runtime.batches,
@@ -262,11 +276,32 @@ export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undef
   }
 
   const merged = merge(drafts, errorAnalysis.reports, runtime.commits);
-  const production = runtime.renderers[0]?.bundleType === 0;
-  const issues = dedupe(merged.map((draft) => toIssue(draft, options, production))).sort(
+  const production = appRenderer(capture)?.bundleType === 0;
+  const nodes = new Map<string, number>();
+  // Markup findings point into the parsed copy; find the same element (by
+  // unique id) in the live page so its source can be looked up.
+  const liveIds = new Map<string, number>();
+  const firstSnapshot = hydration.events[0] ? runtime.snapshots.find((entry) => entry.seq === hydration.events[0]!.commit.snapshot) : undefined;
+  if (firstSnapshot) {
+    walk(firstSnapshot.tree, (node) => {
+      if (!isElement(node)) return;
+      const id = node.attrs.find(([name]) => name === 'id')?.[1];
+      if (id !== undefined) liveIds.set(`#${id}`, liveIds.has(`#${id}`) ? -1 : node.id);
+    });
+  }
+  const converted = merged.map((draft) => {
+    const issue = toIssue(draft, options, production);
+    if (draft.nodeId !== undefined && draft.stage !== 'parsed' && !nodes.has(issue.fingerprint)) nodes.set(issue.fingerprint, draft.nodeId);
+    if (draft.stage === 'parsed' && draft.anchor !== undefined) {
+      const live = liveIds.get(draft.anchor);
+      if (live !== undefined && live > 0) nodes.set(issue.fingerprint, live);
+    }
+    return issue;
+  });
+  const issues = dedupe(converted).sort(
     (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.code.localeCompare(b.code),
   );
-  const analysis: PageAnalysis = { issues, status: pageStatus(capture, issues) };
+  const analysis: PageAnalysis = { issues, status: pageStatus(capture, issues), nodes, timeline: buildTimeline(runtime) };
   const react = reactInfo(capture);
   if (react) analysis.react = react;
   return analysis;

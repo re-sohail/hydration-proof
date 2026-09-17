@@ -7,8 +7,11 @@ import type {
   BuildMode,
   ChecksConfig,
   CookieConfig,
+  HooksConfig,
   HydrationProofConfig,
   IgnoreRule,
+  LoginContext,
+  MockConfig,
   ReporterName,
   RouteEntry,
   ScenarioConfig,
@@ -22,7 +25,7 @@ export interface CliOverrides {
   scenarios?: string[];
   browser?: BrowserName;
   channel?: string;
-  mode?: BuildMode;
+  mode?: BuildMode | 'both';
   reporters?: ReporterName[];
   outputDir?: string;
   workers?: number;
@@ -32,6 +35,11 @@ export interface CliOverrides {
   failOn?: Severity | 'never';
   build?: boolean;
   discover?: boolean;
+  /** 1-based shard index and total, e.g. { index: 2, total: 4 }. */
+  shard?: { index: number; total: number };
+  crawl?: boolean;
+  sitemap?: boolean;
+  cache?: boolean;
 }
 
 export interface ResolvedScenario {
@@ -41,6 +49,10 @@ export interface ResolvedScenario {
   localStorage?: Record<string, string>;
   sessionStorage?: Record<string, string>;
   initScripts: string[];
+  login?: (context: LoginContext) => Promise<void>;
+  mocks: MockConfig[];
+  include: string[];
+  exclude: string[];
 }
 
 export interface ResolvedConfig {
@@ -57,7 +69,8 @@ export interface ResolvedConfig {
     env: Record<string, string>;
     timeout: number;
     reuseExisting: boolean;
-    mode: BuildMode;
+    mode: BuildMode | 'both';
+    devCommand?: string;
   };
   routes: {
     paths: RouteEntry[];
@@ -66,6 +79,12 @@ export interface ResolvedConfig {
     exclude: string[];
     discover: boolean | undefined;
     grep?: RegExp;
+    query: Record<string, string[]>;
+    /** `false`, or the sitemap URL/path to read (`true` means /sitemap.xml and robots.txt). */
+    sitemap: false | true | string;
+    crawl: false | { depth: number; limit: number };
+    notFound: boolean | undefined;
+    manifestExamples: number;
   };
   scenarios: ResolvedScenario[];
   /** Scenario names requested on the command line. */
@@ -89,7 +108,11 @@ export interface ResolvedConfig {
   };
   reporters: ReporterName[];
   outputDir: string;
+  screenshots: 'failures' | 'all' | 'off';
   ci: { failOn: Severity | 'never'; maxWarnings?: number; baseline?: string; newIssuesOnly: boolean };
+  hooks: HooksConfig;
+  cache: boolean;
+  shard?: { index: number; total: number };
 }
 
 export const DEFAULT_IGNORE_SELECTOR = '[data-hydration-proof-ignore]';
@@ -163,7 +186,11 @@ export function resolveConfig(
         context: scenarioContext(scenario, rootDir),
         cookies: scenario.cookies ?? [],
         initScripts: scenario.initScripts ?? [],
+        mocks: scenario.mocks ?? [],
+        include: scenario.include ?? [],
+        exclude: scenario.exclude ?? [],
       };
+      if (scenario.login) resolved.login = scenario.login;
       if (scenario.localStorage) resolved.localStorage = scenario.localStorage;
       if (scenario.sessionStorage) resolved.sessionStorage = scenario.sessionStorage;
       return resolved;
@@ -210,6 +237,11 @@ export function resolveConfig(
       include: config.routes?.include ?? [],
       exclude: config.routes?.exclude ?? ['/api/**'],
       discover: cliRoutes ? false : (overrides.discover ?? config.routes?.discover),
+      query: config.routes?.query ?? {},
+      sitemap: cliRoutes ? false : (overrides.sitemap ?? config.routes?.sitemap ?? false),
+      crawl: false,
+      notFound: cliRoutes ? false : config.routes?.notFound,
+      manifestExamples: config.routes?.manifestExamples ?? 3,
     },
     scenarios,
     scenarioFilter: overrides.scenarios ?? [],
@@ -238,17 +270,35 @@ export function resolveConfig(
       textPatterns: config.ignore?.textPatterns ?? [],
       issues: config.ignore?.issues ?? [],
     },
-    reporters: overrides.reporters ?? config.reporters ?? ['list', 'json'],
+    reporters: overrides.reporters ?? config.reporters ?? ['list', 'json', 'html'],
     outputDir: resolvePath(rootDir, overrides.outputDir ?? config.outputDir ?? '.hydration-proof/report'),
+    screenshots: 'off',
     ci: {
       failOn: overrides.failOn ?? config.ci?.failOn ?? 'error',
       newIssuesOnly: config.ci?.newIssuesOnly ?? false,
     },
+    hooks: {},
+    cache: true,
   };
 
   if (grep) resolved.routes.grep = grep;
   if (url !== undefined) resolved.server.url = checkUrl(url, overrides.url !== undefined ? '--url' : 'server.url');
   if (config.server?.command !== undefined) resolved.server.command = config.server.command;
+  if (config.server?.devCommand !== undefined) resolved.server.devCommand = config.server.devCommand;
+  resolved.screenshots = config.screenshots ?? (resolved.reporters.includes('html') ? 'failures' : 'off');
+  const crawl = overrides.crawl ?? config.routes?.crawl ?? false;
+  if (crawl !== false && !cliRoutes) {
+    const options = crawl === true ? {} : crawl;
+    resolved.routes.crawl = { depth: options.depth ?? 2, limit: options.limit ?? 50 };
+  }
+  resolved.hooks = config.hooks ?? {};
+  resolved.cache = overrides.cache ?? config.cache ?? true;
+  if (overrides.shard) {
+    if (overrides.shard.index < 1 || overrides.shard.index > overrides.shard.total) {
+      throw new ConfigError(`--shard ${overrides.shard.index}/${overrides.shard.total} is out of range.`);
+    }
+    resolved.shard = overrides.shard;
+  }
   if (config.server?.build !== undefined) resolved.server.build = config.server.build;
   if (config.server?.port !== undefined) resolved.server.port = config.server.port;
   if (config.ready?.selector !== undefined) resolved.ready.selector = config.ready.selector;

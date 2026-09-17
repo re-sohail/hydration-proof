@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Browser } from 'playwright-core';
 import { selectAdapter, type Adapter } from './adapters/index.ts';
@@ -7,15 +8,17 @@ import { applyIgnores, type ExpiredRule } from './analyze/ignore.ts';
 import { ExitCode } from './ci/exit-codes.ts';
 import { ConfigError, loadConfig } from './config/load.ts';
 import { resolveConfig, type CliOverrides, type ResolvedConfig } from './config/resolve.ts';
-import type { RouteEntry } from './config/types.ts';
+import type { BuildMode, RouteEntry } from './config/types.ts';
+import type { DiagnosisContext } from './diagnose/index.ts';
+import { createResolver } from './engine/enrich.ts';
 import { DEFAULT_NORMALIZE, genericMarkers, reactMarkers, type NormalizeOptions } from './dom/normalize.ts';
 import { BrowserMissingError, launchBrowser } from './engine/browser.ts';
 import { DEFAULT_READY, type ReadyOptions } from './engine/capture.ts';
 import { loadPlaywright } from './engine/playwright.ts';
-import { DEFAULT_ENGINE, runJobs, type EngineOptions, type PageJob, type PageRun } from './engine/run.ts';
+import { DEFAULT_ENGINE, runJobs, type EngineOptions, type PageJob, type PageRun, type PageScreenshots } from './engine/run.ts';
 import { isReachable, ServerStartError, startServer, type RunningServer } from './engine/server.ts';
 import type { Severity } from './issues/registry.ts';
-import { REPORT_SCHEMA_VERSION, type Issue, type PageResult, type Report, type Summary } from './report/model.ts';
+import { REPORT_SCHEMA_VERSION, type Issue, type PageResult, type Report, type Screenshots, type Summary } from './report/model.ts';
 import { createReporters, type Reporter, type ReporterContext } from './report/reporters/index.ts';
 import { expandPattern, isDynamicPattern, matchesAny, pathOf } from './routes/pattern.ts';
 import { detectPackageManager, selfCommand, type PackageManager } from './util/package-manager.ts';
@@ -125,6 +128,7 @@ async function prepareServer(
   adapter: Adapter,
   packageManager: PackageManager,
   write: (text: string) => void,
+  mode: BuildMode,
 ): Promise<{ baseUrl: string; server?: RunningServer }> {
   const { server } = config;
   if (server.url !== undefined) {
@@ -135,8 +139,11 @@ async function prepareServer(
   }
 
   const commands = adapter.commands({ rootDir: config.rootDir, packageManager });
-  const production = server.mode === 'production';
-  const command = server.command ?? (production ? commands.start : commands.dev);
+  const production = mode === 'production';
+  const custom = production
+    ? server.mode === 'development' ? undefined : server.command
+    : (server.devCommand ?? (server.mode === 'development' ? server.command : undefined));
+  const command = custom ?? (production ? commands.start : commands.dev);
   if (!command) {
     throw new RunError(
       'hydration-proof does not know how to start this app. Set server.command (and server.build) in hydration-proof.config.ts, or pass --url.',
@@ -149,7 +156,7 @@ async function prepareServer(
     const output = commands.buildOutput ? join(server.cwd, commands.buildOutput) : undefined;
     const needed = server.buildWhen === 'always' || (server.buildWhen === 'if-missing' && (output === undefined || !existsSync(output)));
     // A custom start command only gets a build step when one is configured.
-    const effective = server.build !== undefined ? server.build : server.command === undefined ? build : undefined;
+    const effective = server.build !== undefined ? server.build : custom === undefined ? build : undefined;
     if (effective && needed) await runCommand(effective, server.cwd, server.env, write);
   }
 
@@ -158,7 +165,7 @@ async function prepareServer(
   const baseUrl = `http://${host}:${port}`;
   try {
     const running = await startServer({
-      name: 'the app',
+      name: production ? 'the app' : 'the development server',
       command: command.replaceAll('{port}', String(port)),
       cwd: server.cwd,
       env: { PORT: String(port), ...server.env },
@@ -189,7 +196,7 @@ function readyOptions(config: ResolvedConfig, route: RouteEntry): ReadyOptions {
   return ready;
 }
 
-function buildJobs(config: ResolvedConfig, routes: PlannedRoute[], baseUrl: string): PageJob[] {
+function buildJobs(config: ResolvedConfig, routes: PlannedRoute[], baseUrl: string, modeTag?: BuildMode): PageJob[] {
   const jobs: PageJob[] = [];
   const scenarios = config.scenarios.filter(
     (scenario) => config.scenarioFilter.length === 0 || config.scenarioFilter.includes(scenario.name),
@@ -199,7 +206,7 @@ function buildJobs(config: ResolvedConfig, routes: PlannedRoute[], baseUrl: stri
       if (route.scenarios && !route.scenarios.includes(scenario.name)) continue;
       const url = new URL(route.path, `${baseUrl}/`).href;
       const job: PageJob = {
-        id: `${route.path} [${scenario.name}]`,
+        id: `${route.path} [${scenario.name}]${modeTag ? ` (${modeTag})` : ''}`,
         url,
         route: { url, pattern: route.pattern },
         scenario: {
@@ -218,6 +225,39 @@ function buildJobs(config: ResolvedConfig, routes: PlannedRoute[], baseUrl: stri
     }
   }
   return jobs;
+}
+
+function serverEnvironment(config: ResolvedConfig): DiagnosisContext['server'] {
+  if (config.server.url !== undefined) return {};
+  const local = new Intl.DateTimeFormat().resolvedOptions();
+  const env = { ...process.env, ...config.server.env };
+  const lang = env['LC_ALL'] || env['LANG'];
+  const locale = lang && lang !== 'C' && lang !== 'POSIX' ? (lang.split('.')[0] ?? lang).replace('_', '-') : local.locale;
+  return { locale, timezoneId: env['TZ'] || local.timeZone };
+}
+
+function slug(text: string): string {
+  return text.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 40) || 'page';
+}
+
+function writeScreenshots(outputDir: string, run: PageRun, shots: PageScreenshots): Screenshots {
+  const dir = join(outputDir, 'screenshots');
+  mkdirSync(dir, { recursive: true });
+  const base = `${slug(new URL(run.job.url).pathname)}-${createHash('sha1').update(run.job.id).digest('hex').slice(0, 8)}`;
+  const out: Screenshots = {
+    width: shots.width,
+    height: shots.height,
+    boxes: shots.boxes,
+  };
+  if (shots.hydrated) {
+    writeFileSync(join(dir, `${base}-hydrated.jpg`), shots.hydrated);
+    out.hydrated = `screenshots/${base}-hydrated.jpg`;
+  }
+  if (shots.server) {
+    writeFileSync(join(dir, `${base}-server.jpg`), shots.server);
+    out.server = `screenshots/${base}-server.jpg`;
+  }
+  return out;
 }
 
 function normalizeOptions(config: ResolvedConfig, adapter: Adapter): NormalizeOptions {
@@ -242,7 +282,7 @@ function filterChecks(config: ResolvedConfig, issues: Issue[]): Issue[] {
 
 const RANK: Record<Severity, number> = { error: 3, warning: 2, info: 1 };
 
-function toPageResult(run: PageRun, issues: Issue[]): PageResult {
+function toPageResult(run: PageRun, issues: Issue[], mode?: BuildMode): PageResult {
   const counts: Record<Severity, number> = { error: 0, warning: 0, info: 0 };
   for (const issue of issues) if (!issue.ignored) counts[issue.severity]++;
   const status = run.capture.outcome === 'navigation-failed' ? 'error' : counts.error > 0 ? 'failed' : counts.warning > 0 ? 'warning' : 'passed';
@@ -265,7 +305,32 @@ function toPageResult(run: PageRun, issues: Issue[]): PageResult {
     };
   }
   if (run.analysis.react) page.react = run.analysis.react;
+  if (mode) page.mode = mode;
+  if (run.analysis.timeline.length > 0) page.timeline = run.analysis.timeline;
   return page;
+}
+
+/** With --mode both: note issues that appear in only one build. */
+function compareModes(issues: Issue[]): void {
+  const modes = new Map<string, Set<string>>();
+  for (const issue of issues) {
+    if (!issue.mode) continue;
+    const key = `${issue.fingerprint}|${issue.scenario}`;
+    const set = modes.get(key) ?? new Set<string>();
+    set.add(issue.mode);
+    modes.set(key, set);
+  }
+  for (const issue of issues) {
+    const set = issue.mode ? modes.get(`${issue.fingerprint}|${issue.scenario}`) : undefined;
+    if (!set || set.size !== 1) continue;
+    issue.evidence.push({
+      kind: 'note',
+      message:
+        issue.mode === 'production'
+          ? 'Only found in the production build.'
+          : 'Only found in development (React development builds check more).',
+    });
+  }
 }
 
 function summarize(pages: PageResult[], issues: Issue[]): Summary {
@@ -336,6 +401,10 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
   if (unsupported.length > 0) notes.push(`Reporter${unsupported.length === 1 ? '' : 's'} not available yet: ${unsupported.join(', ')}.`);
 
   const playwright = await loadPlaywright(config.rootDir);
+  const modes: BuildMode[] = config.server.mode === 'both' ? ['production', 'development'] : [config.server.mode];
+  if (modes.length > 1 && config.server.url !== undefined) {
+    throw new RunError('--mode both starts the app twice, so it cannot be combined with --url / server.url.', ExitCode.Usage);
+  }
   let browser: Browser | undefined;
   let server: RunningServer | undefined;
   const abort = (): void => {
@@ -345,10 +414,6 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
   options.signal?.addEventListener('abort', abort, { once: true });
 
   try {
-    const prepared = await prepareServer(config, adapter, packageManager, write);
-    server = prepared.server;
-    const baseUrl = prepared.baseUrl;
-
     try {
       browser = await launchBrowser(playwright, {
         browser: config.browser.name,
@@ -365,37 +430,72 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
       throw new RunError(`Could not launch ${config.browser.name}: ${error instanceof Error ? error.message : String(error)}`, ExitCode.Browser);
     }
 
-    const jobs = buildJobs(config, routes, baseUrl);
-    const context: ReporterContext = { config, baseUrl, totalPages: jobs.length, write };
-    for (const reporter of reporters) await reporter.onBegin?.(context);
-    for (const note of notes) write(`  ${note}\n`);
-
-    const engine: EngineOptions = {
-      ...DEFAULT_ENGINE,
-      workers: config.workers,
-      retries: config.retries,
-      normalize: normalizeOptions(config, adapter),
-      runtime: { ignoreSelectors: config.ignore.selectors },
-      reportUnusedSuppression: config.checks.suppressedWarnings === 'strict',
-      propsAudit: config.checks.propsAudit,
-      parseStage: config.checks.invalidHtml || config.checks.externalChanges,
-    };
-
+    if (config.screenshots !== 'off') rmSync(join(config.outputDir, 'screenshots'), { recursive: true, force: true });
+    const resolver = createResolver(config.rootDir);
     const pages: PageResult[] = [];
     const allIssues: Issue[] = [];
     const expired: ExpiredRule[] = [];
-    const pending: Promise<void>[] = [];
-    await runJobs(browser, jobs, engine, (pageRun) => {
-      const issues = filterChecks(config, pageRun.analysis.issues);
-      expired.push(...applyIgnores(issues, { textPatterns: config.ignore.textPatterns, rules: config.ignore.issues }));
-      const page = toPageResult(pageRun, issues);
-      pages.push(page);
-      allIssues.push(...issues);
-      for (const reporter of reporters) pending.push(Promise.resolve(reporter.onPage?.(page, issues, context)));
-    });
-    await Promise.all(pending);
+    const baseUrls: string[] = [];
+    const order = new Map<string, number>();
+    let context: ReporterContext | undefined;
 
-    const order = new Map(jobs.map((job, index) => [job.id, index]));
+    for (const mode of modes) {
+      const modeTag = modes.length > 1 ? mode : undefined;
+      const prepared = await prepareServer(config, adapter, packageManager, write, mode);
+      server = prepared.server;
+      const baseUrl = prepared.baseUrl;
+      baseUrls.push(baseUrl);
+      try {
+        const jobs = buildJobs(config, routes, baseUrl, modeTag);
+        for (const job of jobs) order.set(job.id, order.size);
+        if (!context) {
+          context = { config, baseUrl, totalPages: jobs.length * modes.length, write };
+          for (const reporter of reporters) await reporter.onBegin?.(context);
+          for (const note of notes) write(`  ${note}\n`);
+        }
+        const reporterContext = context;
+
+        // Development servers compile each route on its first request.
+        if (mode === 'development') {
+          await Promise.all(
+            [...new Set(jobs.map((job) => job.url))].map((url) => fetch(url, { signal: AbortSignal.timeout(config.server.timeout) }).catch(() => undefined)),
+          );
+        }
+
+        const engine: EngineOptions = {
+          ...DEFAULT_ENGINE,
+          workers: config.workers,
+          retries: config.retries,
+          normalize: normalizeOptions(config, adapter),
+          runtime: { ignoreSelectors: config.ignore.selectors },
+          reportUnusedSuppression: config.checks.suppressedWarnings === 'strict',
+          propsAudit: config.checks.propsAudit,
+          parseStage: config.checks.invalidHtml || config.checks.externalChanges,
+          rootDir: config.rootDir,
+          resolver,
+          serverEnvironment: serverEnvironment(config),
+          screenshots: config.screenshots,
+        };
+
+        const pending: Promise<void>[] = [];
+        await runJobs(browser, jobs, engine, (pageRun) => {
+          const issues = filterChecks(config, pageRun.analysis.issues);
+          if (modeTag) for (const issue of issues) issue.mode = modeTag;
+          expired.push(...applyIgnores(issues, { textPatterns: config.ignore.textPatterns, rules: config.ignore.issues }));
+          const page = toPageResult(pageRun, issues, modeTag);
+          if (pageRun.screenshots) page.screenshots = writeScreenshots(config.outputDir, pageRun, pageRun.screenshots);
+          pages.push(page);
+          allIssues.push(...issues);
+          for (const reporter of reporters) pending.push(Promise.resolve(reporter.onPage?.(page, issues, reporterContext)));
+        });
+        await Promise.all(pending);
+      } finally {
+        await server?.stop();
+        server = undefined;
+      }
+    }
+
+    if (modes.length > 1) compareModes(allIssues);
     pages.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     const finishedAt = new Date();
     const report: Report = {
@@ -411,7 +511,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
         playwright: playwright.version,
         browsers: [`${config.browser.name}${config.browser.channel ? ` (${config.browser.channel})` : ''} ${browser.version()}`],
         mode: config.server.mode,
-        baseUrl,
+        baseUrl: baseUrls.join(', '),
         ...(process.env['GITHUB_ACTIONS'] ? { ci: 'github-actions' } : process.env['GITLAB_CI'] ? { ci: 'gitlab' } : process.env['CI'] ? { ci: 'ci' } : {}),
       },
       summary: summarize(pages, allIssues),
@@ -422,8 +522,9 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     const failures = policy(config, report, expired);
     const exitCode = failures.length > 0 ? ExitCode.Failed : ExitCode.Ok;
     const files: string[] = [];
+    const endContext = context ?? { config, baseUrl: baseUrls[0] ?? '', totalPages: 0, write };
     for (const reporter of reporters) {
-      const written = await reporter.onEnd?.(report, { ...context, exitCode, failures });
+      const written = await reporter.onEnd?.(report, { ...endContext, exitCode, failures });
       if (written) files.push(...written);
     }
     return { report, exitCode, failures, files, notes };

@@ -197,6 +197,8 @@ export interface RootInfo {
   hydratedAt?: number;
   /** Boundaries still waiting to hydrate. */
   pendingBoundaries: number;
+  /** Root of developer tooling (e.g. the Next.js dev overlay), not of the app. */
+  tooling?: true;
 }
 
 export type CommitKind = 'hydration' | 'boundary-hydration' | 'update';
@@ -279,6 +281,8 @@ export interface RuntimeStatus {
   renderers: number;
   roots: number;
   pendingBoundaries: number;
+  /** Pending boundaries whose server content has already arrived (only React's hydration is missing). */
+  pendingWithContent: number;
   time: number;
   /** Commit sequence of the latest hydration commit whose passive effects have flushed. */
   effectsFlushed: number;
@@ -321,6 +325,29 @@ export const DEFAULT_RUNTIME_OPTIONS: RuntimeOptions = {
   ignoreSelectors: ['[data-hydration-proof-ignore]'],
 };
 
+/** Where React created an element (development builds only). */
+export interface NodeSource {
+  id: NodeId;
+  /** Component that rendered the element, innermost first (up to 8). */
+  owners: string[];
+  /**
+   * Stacks captured when the element and its owners were created (React 19
+   * dev), innermost first. Library components are skipped by trying the next.
+   */
+  stacks: string[];
+  /** Babel/SWC `__source` of the element and its owners (React 18 dev), innermost first. */
+  debugSources: { fileName: string; lineNumber: number; columnNumber?: number }[];
+}
+
+export interface NodeRect {
+  id: NodeId;
+  /** Document coordinates. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** The object the runtime installs at `window[RUNTIME_GLOBAL]`. */
 export interface RuntimeApi {
   version: number;
@@ -328,4 +355,8 @@ export interface RuntimeApi {
   drain(): DrainPayload;
   /** Serialize the whole document now; returns the snapshot sequence number. */
   snapshot(kind: SnapshotKind): number;
+  /** Source information for live nodes. */
+  sources(ids: NodeId[]): NodeSource[];
+  /** Document-relative boxes of live nodes (text nodes use their parent). */
+  rects(ids: NodeId[]): NodeRect[];
 }

@@ -58,7 +58,8 @@ export type IssueCode =
   | 'HP9006'
   | 'HP9007'
   | 'HP9008'
-  | 'HP9009';
+  | 'HP9009'
+  | 'HP9010';
 
 type Row = readonly [name: string, title: string, severity: Severity, description: string];
 
@@ -162,6 +163,8 @@ const definitions: Record<IssueCode, Row> = {
     'A React renderer was injected but no root was created before the timeout.'],
   HP9009: ['ready-timeout', 'The page never became quiet', 'warning',
     'The ready conditions (quiet DOM, selector, function) were not met before the timeout.'],
+  HP9010: ['unexpected-redirect', 'The route redirected somewhere else', 'warning',
+    'The route ended on a different URL than requested (or than expectRedirect). A signed-in scenario that lands on a login page usually means its login did not work.'],
 };
 
 export const ISSUES: ReadonlyMap<IssueCode, IssueDefinition> = new Map(

@@ -5,7 +5,7 @@ import type { Evidence } from '../report/model.ts';
 import { diffTrees, type DomChange } from '../dom/diff.ts';
 import { normalizeTree, sameClassList, sameStyle, type NormalizeOptions } from '../dom/normalize.ts';
 import { rewind } from '../dom/rewind.ts';
-import { getAttr, indexTree, isElement, isText, outline, textContent, walk, type TreeIndex } from '../dom/tree.ts';
+import { getAttr, indexTree, isElement, isText, outline, textContent, toHtml, walk, type TreeIndex } from '../dom/tree.ts';
 import { describeValue, locate, locator, placed, type Draft, type Locator } from './draft.ts';
 
 // Analyse each commit that hydrated a root or a Suspense boundary:
@@ -93,6 +93,47 @@ function ownerOf(index: TreeIndex, id: number | undefined): string | undefined {
   return undefined;
 }
 
+function elementNode(index: TreeIndex, id: number | undefined): SElement | undefined {
+  const node = id === undefined ? undefined : index.get(id)?.node;
+  return isElement(node) ? node : undefined;
+}
+
+/** The element as React wants it: DOM attributes replaced by the client view. */
+function clientVersion(el: SElement): SElement {
+  const client = el.client;
+  if (!client) return el;
+  const attrs = new Map(el.attrs);
+  for (const [name, value] of Object.entries(client.attrs)) {
+    if (value === null) attrs.delete(name);
+    else attrs.set(name, value);
+  }
+  if (client.style !== undefined) attrs.set('style', client.style);
+  const children = client.text !== undefined ? [{ k: 3 as const, id: -1, text: client.text }] : el.children;
+  return { ...el, attrs: [...attrs.entries()], children };
+}
+
+function excerpt(server: SNode | undefined, client: SNode | undefined): { server?: string; client?: string } {
+  const out: { server?: string; client?: string } = {};
+  if (server) out.server = toHtml(server, { maxDepth: 3, maxLength: 800 });
+  if (client) out.client = toHtml(client, { maxDepth: 3, maxLength: 800 });
+  return out;
+}
+
+/** The nearest ancestor (not html/body) marked with suppressHydrationWarning. */
+function suppressingAncestor(index: TreeIndex, id: number | undefined): SElement | undefined {
+  let current = id === undefined ? undefined : index.get(id);
+  current = current?.parent ? index.get(current.parent.id) : undefined;
+  while (current) {
+    const node = current.node;
+    if (isElement(node)) {
+      if (node.tag === 'html' || node.tag === 'body') return undefined;
+      if (node.client?.suppress) return node;
+    }
+    current = current.parent ? index.get(current.parent.id) : undefined;
+  }
+  return undefined;
+}
+
 function isSuppressed(index: TreeIndex, elementId: number | undefined): boolean {
   const located = elementId === undefined ? undefined : index.get(elementId);
   return isElement(located?.node) && located.node.client?.suppress === true;
@@ -127,7 +168,36 @@ function classifyChange(
 ): Draft | undefined {
   const { postLocator, pre, post, commit } = event;
   const component = ownerOf(post, change.afterElement);
-  const base = { stage: 'hydration' as const, commit: commit.seq, evidence: [...context], ...(component ? { component } : {}) };
+  const serverElement = elementNode(pre, change.beforeElement) ?? (isElement(change.before) ? change.before : undefined);
+  const clientElement = elementNode(post, change.afterElement) ?? (isElement(change.after) ? change.after : undefined);
+  const evidence = [...context];
+  const suppressor = suppressingAncestor(post, change.afterElement);
+  if (suppressor) {
+    evidence.push({
+      kind: 'note',
+      message: `<${suppressor.tag}> has suppressHydrationWarning, but it only covers that element's own text and attributes, not this descendant.`,
+    });
+  }
+  const base = {
+    stage: 'hydration' as const,
+    commit: commit.seq,
+    evidence,
+    excerpt: excerpt(change.kind === 'insert' ? undefined : (serverElement ?? change.before), change.kind === 'remove' ? undefined : (clientElement ?? change.after)),
+    ...(component ? { component } : {}),
+  };
+  const structural = change.kind === 'tag' || change.kind === 'insert' || change.kind === 'remove';
+  if (structural && (isSuppressed(post, change.afterElement) || (clientElement !== undefined && clientElement.client?.suppress === true))) {
+    return placed(
+      {
+        ...base,
+        code: 'HP6002',
+        confidence: 0.9,
+        suppressed: true,
+        message: `suppressHydrationWarning is set here, but the elements inside differ between server and client, so React still re-renders them.`,
+      },
+      locate(postLocator, change.afterElement),
+    );
+  }
 
   switch (change.kind) {
     case 'text': {
@@ -245,8 +315,9 @@ function auditElement(post: SElement, pre: SElement, event: HydrationEvent, repo
     ...(post.owner ? { component: post.owner } : {}),
     ...(suppressed ? { suppressed: true } : {}),
   };
+  const views = excerpt(pre, clientVersion(post));
   const emit = (code: IssueCode, draft: Omit<Draft, 'code' | 'stage' | 'evidence' | 'commit'>): void => {
-    drafts.push(placed({ ...base, ...draft, code: suppressed ? 'HP6001' : code }, location));
+    drafts.push(placed({ ...base, excerpt: views, ...draft, code: suppressed ? 'HP6001' : code }, location));
   };
 
   const skipped = new Set(client.skipped ?? []);

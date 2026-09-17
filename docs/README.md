@@ -5,6 +5,8 @@
 - [Configuration](configuration.md): every option of `hydration-proof.config.ts`
 - [Running in CI](ci.md): GitHub Actions, GitLab CI and others
 - [Issue codes](issues.md): what each finding means and how to fix it
+- [Likely causes](causes.md): how causes are diagnosed and fixed
+- [Reports](reports.md): terminal, JSON and HTML reports
 - [Troubleshooting](troubleshooting.md)
 
 The published documentation site is https://hydration.jscrate.dev.

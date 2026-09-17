@@ -84,3 +84,53 @@ export async function parseDocument(
     await context.close();
   }
 }
+
+/**
+ * A picture of the server HTML as the browser renders it without scripts
+ * (stylesheets, fonts and images are allowed to load).
+ */
+export async function screenshotServerHtml(
+  browser: Browser,
+  document: DocumentResponse,
+  contextOptions: BrowserContextOptions,
+  maxHeight: number,
+): Promise<Buffer | undefined> {
+  if (document.body === undefined) return undefined;
+  const context = await browser.newContext({ ...contextOptions, serviceWorkers: 'block' });
+  try {
+    let served = false;
+    await context.route('**/*', async (route) => {
+      const request = route.request();
+      if (!served && request.isNavigationRequest()) {
+        served = true;
+        await route.fulfill({ status: 200, headers: replayHeaders(document.headers, 'csp'), body: document.body });
+        return;
+      }
+      const type = request.resourceType();
+      if (type === 'stylesheet' || type === 'image' || type === 'font' || type === 'media') await route.continue();
+      else await route.abort('blockedbyclient');
+    });
+    const page = await context.newPage();
+    await page.goto(document.url, { waitUntil: 'load', timeout: 15_000 }).catch(() => undefined);
+    return await screenshot(page, maxHeight);
+  } catch {
+    return undefined;
+  } finally {
+    await context.close();
+  }
+}
+
+export async function screenshot(page: import('playwright-core').Page, maxHeight: number): Promise<Buffer | undefined> {
+  try {
+    const size = await page.evaluate(() => {
+      const root = (globalThis as unknown as { document: { documentElement: { scrollWidth: number; scrollHeight: number } } }).document
+        .documentElement;
+      return { width: root.scrollWidth, height: root.scrollHeight };
+    });
+    const height = Math.min(size.height, maxHeight);
+    const clip = { x: 0, y: 0, width: Math.max(1, size.width), height: Math.max(1, height) };
+    return await page.screenshot({ type: 'jpeg', quality: 70, fullPage: true, clip, animations: 'disabled', caret: 'hide' });
+  } catch {
+    return undefined;
+  }
+}

@@ -76,8 +76,13 @@
           "type": "string",
           "enum": [
             "production",
-            "development"
+            "development",
+            "both"
           ]
+        },
+        "devCommand": {
+          "description": "Dev server command used with mode \"both\".",
+          "type": "string"
         }
       }
     },
@@ -492,6 +497,14 @@
     },
     "outputDir": {
       "type": "string"
+    },
+    "screenshots": {
+      "type": "string",
+      "enum": [
+        "failures",
+        "all",
+        "off"
+      ]
     },
     "ci": {
       "type": "object",

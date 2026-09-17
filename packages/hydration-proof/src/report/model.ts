@@ -48,6 +48,24 @@ export interface Cause {
   id: string;
   title: string;
   confidence: number;
+  docsUrl?: string;
+}
+
+export interface TimelineEntry {
+  /** Milliseconds since navigation start. */
+  time: number;
+  kind: 'renderer' | 'commit' | 'error' | 'mutation' | 'stream' | 'effects' | 'snapshot';
+  label: string;
+  detail?: string;
+}
+
+export interface Screenshots {
+  /** Paths relative to the report directory. */
+  hydrated?: string;
+  server?: string;
+  width: number;
+  height: number;
+  boxes: { fingerprint: string; x: number; y: number; width: number; height: number }[];
 }
 
 export interface Issue {
@@ -81,6 +99,10 @@ export interface Issue {
   ignored?: { reason: string; rule: string };
   /** The element carried suppressHydrationWarning. */
   suppressed?: boolean;
+  /** Short HTML of the element on each side. */
+  excerpt?: { server?: string; client?: string };
+  /** Build mode the issue was found in (runs with --mode both). */
+  mode?: 'production' | 'development';
 }
 
 export type PageStatus = 'passed' | 'warning' | 'failed' | 'error';
@@ -105,6 +127,9 @@ export interface PageResult {
   /** Fingerprints of the issues found on this page. */
   issues: string[];
   counts: Record<Severity, number>;
+  mode?: 'production' | 'development';
+  timeline?: TimelineEntry[];
+  screenshots?: Screenshots;
 }
 
 export interface RunInfo {

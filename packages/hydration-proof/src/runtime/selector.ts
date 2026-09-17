@@ -48,3 +48,15 @@ export function cssPath(el: Element): string {
   }
   return parts.join(' > ');
 }
+
+const TOOLING_SELECTOR = 'nextjs-portal, [data-nextjs-dev-overlay], [data-hydration-proof-internal], vite-error-overlay';
+
+/** Inside developer tooling UI (framework dev overlays), including their shadow roots. */
+export function isToolingNode(node: Node): boolean {
+  let current: Node | null = node;
+  while (current) {
+    if (current.nodeType === Node.ELEMENT_NODE && (current as Element).matches(TOOLING_SELECTOR)) return true;
+    current = current.parentNode ?? (current instanceof ShadowRoot ? current.host : null);
+  }
+  return false;
+}

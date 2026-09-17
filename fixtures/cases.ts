@@ -16,8 +16,13 @@ export interface Expectation {
   anyOfCodes: string[];
   /** ...and, when set, point at an element matching this CSS id selector. */
   selector?: string;
-  /** Expected cause id (from 0.2). */
-  cause?: string;
+  /** Acceptable cause ids. */
+  cause?: string[];
+  /**
+   * Development mode: the reported source file must end with `file`, and the
+   * reported line must contain `contains`.
+   */
+  source?: { file: string; contains: string };
 }
 
 export interface FixtureCase {
@@ -74,6 +79,8 @@ const EXTENSION_SCRIPT = `(() => {
 })();`;
 
 const TEXT = ['HP1001'];
+const FILE = 'next-cases/src/broken.jsx';
+const at = (id: string, tag = 'p'): Expectation['source'] => ({ file: FILE, contains: `<${tag} id="${id}"` });
 
 function broken(route: string, expect: Expectation, extra: Partial<FixtureCase> = {}): Omit<FixtureCase, 'app'> {
   return { route, kind: 'broken', expect, ...extra };
@@ -84,18 +91,26 @@ function control(route: string, extra: Partial<FixtureCase> = {}): Omit<FixtureC
 }
 
 const shared: Omit<FixtureCase, 'app'>[] = [
-  broken('/date-now', { anyOfCodes: TEXT, selector: '#date-now' }),
-  broken('/math-random', { anyOfCodes: TEXT, selector: '#math-random' }),
-  broken('/locale', { anyOfCodes: TEXT, selector: '#locale' }, { context: { locale: 'de-DE' } }),
-  broken('/timezone', { anyOfCodes: TEXT, selector: '#timezone' }, { context: { timezoneId: 'Asia/Karachi' } }),
-  broken('/local-storage', { anyOfCodes: TEXT, selector: '#local-storage' }, { storage: { name: 'Sohail' } }),
-  broken('/match-media', { anyOfCodes: TEXT, selector: '#match-media' }, { context: { viewport: { width: 390, height: 844 } } }),
-  broken('/invalid-nesting', { anyOfCodes: ['HP3001'], selector: '#invalid-nesting' }),
-  broken('/dark-mode', { anyOfCodes: ['HP1004'], selector: '#dark-mode' }, { context: { colorScheme: 'dark' } }),
-  broken('/css-in-js', { anyOfCodes: ['HP1004'], selector: '#css-in-js' }),
-  broken('/browser-mutation', { anyOfCodes: ['HP4001'], selector: '#browser-mutation' }, { initScripts: [EXTENSION_SCRIPT] }),
-  broken('/cdn-whitespace', { anyOfCodes: ['HP1001', 'HP1015', 'HP4003'], selector: '#cdn-whitespace' }, { via: 'cdn-proxy' }),
-  broken('/api-data', { anyOfCodes: TEXT, selector: '#api-data' }),
+  broken('/date-now', { anyOfCodes: TEXT, selector: '#date-now', cause: ['time'], source: at('date-now') }),
+  broken('/math-random', { anyOfCodes: TEXT, selector: '#math-random', cause: ['random'], source: at('math-random') }),
+  broken('/locale', { anyOfCodes: TEXT, selector: '#locale', cause: ['locale'], source: at('locale') }, { context: { locale: 'de-DE' } }),
+  broken('/timezone', { anyOfCodes: TEXT, selector: '#timezone', cause: ['timezone'], source: at('timezone') }, { context: { timezoneId: 'Asia/Karachi' } }),
+  broken('/local-storage', { anyOfCodes: TEXT, selector: '#local-storage', cause: ['storage'], source: at('local-storage') }, { storage: { name: 'Sohail' } }),
+  broken('/match-media', { anyOfCodes: TEXT, selector: '#match-media', cause: ['media-query'], source: at('match-media') }, { context: { viewport: { width: 390, height: 844 } } }),
+  broken('/invalid-nesting', { anyOfCodes: ['HP3001'], selector: '#invalid-nesting', cause: ['invalid-html'], source: at('invalid-nesting') }),
+  broken('/dark-mode', { anyOfCodes: ['HP1004'], selector: '#dark-mode', cause: ['theme'], source: at('dark-mode', 'div') }, { context: { colorScheme: 'dark' } }),
+  broken('/css-in-js', { anyOfCodes: ['HP1004'], selector: '#css-in-js', cause: ['css-in-js'], source: at('css-in-js', 'Title') }),
+  broken(
+    '/browser-mutation',
+    { anyOfCodes: ['HP4001'], selector: '#browser-mutation', cause: ['third-party-script', 'extension'], source: at('browser-mutation') },
+    { initScripts: [EXTENSION_SCRIPT] },
+  ),
+  broken(
+    '/cdn-whitespace',
+    { anyOfCodes: ['HP1001', 'HP1015', 'HP4003'], selector: '#cdn-whitespace', cause: ['cdn'], source: at('cdn-whitespace') },
+    { via: 'cdn-proxy' },
+  ),
+  broken('/api-data', { anyOfCodes: TEXT, selector: '#api-data', cause: ['data'], source: at('api-data') }),
   control('/mounted'),
   control('/suppress'),
   control('/use-id'),

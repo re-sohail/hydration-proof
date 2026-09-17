@@ -32,6 +32,20 @@ Every node gets an identity, so the comparison knows whether React reused a node
 
 Findings from different comparisons are merged, so one bug is reported once, with React's own error attached as evidence.
 
+## Explaining a finding
+
+For every finding, hydration-proof looks up:
+
+- **The component and the source line.** In development builds React records where each element was created; hydration-proof maps that position through the page's source maps to your file and line, and shows the code. React 18 uses the `__source` information the compiler adds. For elements created inside libraries (styled-components, UI kits), the location of the component that used them is shown. In production builds, the component stack of React's error is mapped instead when browser source maps are available.
+- **The likely cause**, from the values that differ, the code around that line, the scenario, and the stage where the difference started. See [causes](causes.md).
+- **What to do about it**: advice for the cause, plus the general advice for the issue code.
+
+When a location cannot be proven, the report says so instead of guessing.
+
+## Development and production
+
+`--mode both` starts the app twice: a production build and the development server. Development builds give component names and exact source lines; production builds show what users get (React 19 production does not report attribute mismatches at all). Issues found in only one mode are marked.
+
 ## What it does not change
 
 Your application code and build are not modified. The runtime exists only in the test browser.

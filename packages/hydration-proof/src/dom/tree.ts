@@ -181,3 +181,63 @@ export function outline(node: AnyNode, maxLength = 160): string {
   }
   return out.length > maxLength ? `${out.slice(0, maxLength - 1)}…` : out;
 }
+
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+
+function escapeText(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeAttribute(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+/** Pretty HTML for a subtree, limited in depth and length (for reports). */
+export function toHtml(node: AnyNode, options: { maxDepth?: number; maxLength?: number } = {}): string {
+  const maxDepth = options.maxDepth ?? 4;
+  const maxLength = options.maxLength ?? 1200;
+  const lines: string[] = [];
+  let length = 0;
+  const push = (depth: number, text: string): boolean => {
+    if (length > maxLength) return false;
+    const line = `${'  '.repeat(depth)}${text}`;
+    lines.push(line);
+    length += line.length + 1;
+    return true;
+  };
+  const visit = (current: AnyNode, depth: number): void => {
+    if (length > maxLength) return;
+    if (isText(current)) {
+      const text = current.text.replace(/\s+/g, ' ');
+      if (text.trim() !== '' || text.length > 0) push(depth, escapeText(text.length > 200 ? `${text.slice(0, 199)}…` : text));
+      return;
+    }
+    if (isComment(current)) {
+      push(depth, `<!--${current.text}-->`);
+      return;
+    }
+    if (!isElement(current)) {
+      const children = childrenOf(current) ?? [];
+      for (const child of children) visit(child, depth);
+      return;
+    }
+    const attrs = current.attrs.map(([key, value]) => (value === '' ? ` ${key}` : ` ${key}="${escapeAttribute(value.length > 120 ? `${value.slice(0, 119)}…` : value)}"`)).join('');
+    if (VOID_TAGS.has(current.tag)) {
+      push(depth, `<${current.tag}${attrs}>`);
+      return;
+    }
+    const onlyText = current.children.length === 1 && isText(current.children[0]) && current.children[0].text.length < 80;
+    if (current.children.length === 0 || onlyText) {
+      const inner = onlyText ? escapeText((current.children[0] as { text: string }).text) : '';
+      push(depth, `<${current.tag}${attrs}>${inner}</${current.tag}>`);
+      return;
+    }
+    push(depth, `<${current.tag}${attrs}>`);
+    if (depth >= maxDepth) push(depth + 1, '…');
+    else for (const child of current.children) visit(child, depth + 1);
+    push(depth, `</${current.tag}>`);
+  };
+  visit(node, 0);
+  if (length > maxLength) lines.push('…');
+  return lines.join('\n');
+}

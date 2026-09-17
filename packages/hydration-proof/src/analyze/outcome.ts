@@ -3,7 +3,16 @@ import type { Draft } from './draft.ts';
 
 // Findings about the test run itself (HP9xxx).
 
-export function analyzeOutcome(capture: PageCapture, expectedStatuses: readonly number[]): Draft[] {
+function normalizePath(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return (parsed.pathname.replace(/\/+$/, '') || '/') + parsed.search;
+  } catch {
+    return url;
+  }
+}
+
+export function analyzeOutcome(capture: PageCapture, expectedStatuses: readonly number[], expectRedirect?: string): Draft[] {
   const drafts: Draft[] = [];
   const base = { stage: 'runtime' as const, evidence: [] };
   switch (capture.outcome) {
@@ -19,6 +28,18 @@ export function analyzeOutcome(capture: PageCapture, expectedStatuses: readonly 
     case 'client-only':
       drafts.push({ ...base, code: 'HP9003', confidence: 0.9, message: 'React mounted with createRoot; there is no server HTML to hydrate.', key: 'client-only' });
       break;
+    case 'hydration-stalled': {
+      const pending = capture.runtime.status?.pendingBoundaries ?? 0;
+      drafts.push({
+        ...base,
+        code: 'HP9001',
+        severity: 'info',
+        confidence: 0.6,
+        message: `React did not hydrate ${pending} Suspense boundar${pending === 1 ? 'y' : 'ies'} whose content had already arrived; React hydrates ${pending === 1 ? 'it' : 'them'} on the first interaction.`,
+        key: 'hydration-stalled',
+      });
+      break;
+    }
     case 'hydration-timeout': {
       const pending = capture.runtime.status?.pendingBoundaries ?? 0;
       drafts.push({
@@ -56,6 +77,28 @@ export function analyzeOutcome(capture: PageCapture, expectedStatuses: readonly 
         confidence: 0.9,
         message: `The document body could not be read${document.bodyError ? `: ${document.bodyError}` : '.'}`,
         key: 'body',
+      });
+    }
+  }
+
+  {
+    // Navigation failures returned above.
+    const requested = normalizePath(capture.requestedUrl);
+    const final = normalizePath(capture.finalUrl);
+    const expected = expectRedirect === undefined ? requested : normalizePath(new URL(expectRedirect, capture.requestedUrl).href);
+    if (final !== expected) {
+      drafts.push({
+        ...base,
+        code: 'HP9010',
+        severity: expectRedirect === undefined ? 'warning' : 'error',
+        confidence: 1,
+        message:
+          expectRedirect === undefined
+            ? `${requested} redirected to ${final}; the page that was tested is ${final}.`
+            : `${requested} should redirect to ${expected} but ended on ${final}.`,
+        server: requested,
+        client: final,
+        key: 'redirect',
       });
     }
   }

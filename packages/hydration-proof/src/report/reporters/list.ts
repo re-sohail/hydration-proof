@@ -7,7 +7,8 @@ const MAX_ISSUES_PER_PAGE = 3;
 
 function pageLabel(page: PageResult, multipleScenarios: boolean): string {
   const path = new URL(page.url).pathname + new URL(page.url).search;
-  return multipleScenarios ? `${path} [${page.scenario}]` : path;
+  const tags = [multipleScenarios ? page.scenario : '', page.mode ?? ''].filter(Boolean);
+  return tags.length > 0 ? `${path} [${tags.join(', ')}]` : path;
 }
 
 function quote(value: string | null | undefined): string {
@@ -18,7 +19,8 @@ function quote(value: string | null | undefined): string {
 
 function issueLines(issue: Issue, c: Palette): string[] {
   const color = issue.severity === 'error' ? c.red : issue.severity === 'warning' ? c.yellow : c.cyan;
-  const lines = [`    ${color(issue.code)} ${issue.title}`];
+  const cause = issue.cause ? c.gray(`  (${issue.cause.title.toLowerCase()}, ${Math.round(issue.cause.confidence * 100)}%)`) : '';
+  const lines = [`    ${color(issue.code)} ${issue.title}${cause}`];
   const where = [issue.selector, issue.component ? `in ${issue.component}` : undefined].filter(Boolean).join('  ');
   if (where) lines.push(`      ${c.gray(where)}`);
   if (issue.server !== undefined || issue.client !== undefined) {
@@ -28,7 +30,8 @@ function issueLines(issue: Issue, c: Palette): string[] {
   } else {
     lines.push(`      ${issue.message}`);
   }
-  if (issue.source) lines.push(`      ${c.gray(`${issue.source.file}:${issue.source.line}`)}`);
+  if (issue.source) lines.push(`      ${c.cyan(`${issue.source.file}:${issue.source.line}${issue.source.column ? `:${issue.source.column}` : ''}`)}`);
+  if (issue.suggestions[0]) lines.push(`      ${c.gray(`→ ${issue.suggestions[0]}`)}`);
   return lines;
 }
 
@@ -74,7 +77,9 @@ export function listReporter(stream: NodeJS.WriteStream = process.stdout): Repor
       for (const failure of context.failures) context.write(`\n  ${c.red(symbols.error)} ${failure}\n`);
       if (context.exitCode === 0) context.write(`\n  ${c.green('No hydration problems found.')}\n`);
       const reportFile = report.run.cwd ? relative(report.run.cwd, context.config.outputDir) || '.' : context.config.outputDir;
-      if (context.config.reporters.some((name) => name !== 'list')) context.write(`  ${c.gray(`Reports: ${reportFile}`)}\n`);
+      const html = context.config.reporters.includes('html') ? `${reportFile}/report.html` : undefined;
+      if (html) context.write(`  ${c.gray('Report:')} ${html}\n`);
+      else if (context.config.reporters.some((name) => name !== 'list')) context.write(`  ${c.gray(`Reports: ${reportFile}`)}\n`);
       context.write('\n');
     },
   };

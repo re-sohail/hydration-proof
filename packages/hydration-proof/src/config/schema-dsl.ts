@@ -8,6 +8,7 @@ export type Schema =
   | { kind: 'literal'; value: string | number | boolean; description?: string }
   | { kind: 'regexp'; description?: string }
   | { kind: 'function'; description?: string }
+  | { kind: 'any'; description?: string }
   | { kind: 'array'; items: Schema; description?: string; minItems?: number }
   | { kind: 'record'; values: Schema; description?: string }
   | {
@@ -30,6 +31,7 @@ export const s = {
   literal: (value: string | number | boolean): Schema => ({ kind: 'literal', value }),
   regexp: (description?: string): Schema => ({ kind: 'regexp', ...(description ? { description } : {}) }),
   fn: (description?: string): Schema => ({ kind: 'function', ...(description ? { description } : {}) }),
+  any: (description?: string): Schema => ({ kind: 'any', ...(description ? { description } : {}) }),
   array: (items: Schema, description?: string): Schema => ({ kind: 'array', items, ...(description ? { description } : {}) }),
   record: (values: Schema, description?: string): Schema => ({ kind: 'record', values, ...(description ? { description } : {}) }),
   object: (properties: Record<string, Schema>, description?: string, required?: readonly string[]): Schema => ({
@@ -64,6 +66,8 @@ function describe(schema: Schema): string {
       return 'a RegExp';
     case 'function':
       return 'a function';
+    case 'any':
+      return 'any value';
     case 'array':
       return 'an array';
     case 'record':
@@ -138,6 +142,8 @@ export function validate(value: unknown, schema: Schema, path = ''): SchemaIssue
       return value instanceof RegExp ? [] : [{ path: where, message: `must be a RegExp, got ${typeName(value)}` }];
     case 'function':
       return typeof value === 'function' ? [] : [{ path: where, message: `must be a function, got ${typeName(value)}` }];
+    case 'any':
+      return [];
     case 'array': {
       if (!Array.isArray(value)) return [{ path: where, message: `must be an array, got ${typeName(value)}` }];
       if (schema.minItems !== undefined && value.length < schema.minItems) {
@@ -205,6 +211,8 @@ export function toJsonSchema(schema: Schema): JsonSchema {
       return withDescription({ type: 'string', format: 'regex', description: 'A RegExp (JavaScript/TypeScript configs only) or a regular expression source string.' });
     case 'function':
       return withDescription({ description: 'A function (JavaScript/TypeScript configs only).' });
+    case 'any':
+      return withDescription({});
     case 'array':
       return withDescription({ type: 'array', items: toJsonSchema(schema.items) });
     case 'record':

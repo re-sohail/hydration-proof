@@ -17,6 +17,7 @@ const ready: Schema = s.object(
 const route: Schema = s.object(
   {
     path: s.string({ description: 'Path, e.g. /pricing.' }),
+    expectRedirect: s.string({ description: 'Path the route must redirect to.' }),
     pattern: s.string({ description: 'Route pattern used for grouping.' }),
     expectStatus: s.array(s.number({ integer: true, minimum: 100, maximum: 599 })),
     scenarios: s.array(s.string()),
@@ -58,6 +59,22 @@ const scenario: Schema = s.object(
     localStorage: s.record(s.string()),
     sessionStorage: s.record(s.string()),
     initScripts: s.array(s.string()),
+    login: s.fn('Signs in once before the scenario is tested.'),
+    mocks: s.array(
+      s.object(
+        {
+          url: s.union([s.string(), s.regexp()]),
+          method: s.string(),
+          status: s.number({ integer: true, minimum: 100, maximum: 599 }),
+          headers: s.record(s.string()),
+          body: s.any('Response body; objects are sent as JSON.'),
+        },
+        undefined,
+        ['url'],
+      ),
+    ),
+    include: s.array(s.string()),
+    exclude: s.array(s.string()),
   },
   'A browser environment routes are tested in.',
   ['name'],
@@ -91,7 +108,8 @@ export const configSchema: Schema = s.object(
       env: s.record(s.string()),
       timeout: s.number({ integer: true, minimum: 1 }),
       reuseExisting: s.boolean(),
-      mode: s.enum(['production', 'development']),
+      mode: s.enum(['production', 'development', 'both']),
+      devCommand: s.string({ description: 'Dev server command used with mode "both".' }),
     }),
     routes: s.object({
       paths: s.array(s.union([s.string(), route])),
@@ -99,6 +117,14 @@ export const configSchema: Schema = s.object(
       include: s.array(s.string()),
       exclude: s.array(s.string()),
       discover: s.boolean(),
+      query: s.record(s.array(s.string())),
+      sitemap: s.union([s.boolean(), s.string()]),
+      crawl: s.union([
+        s.boolean(),
+        s.object({ depth: s.number({ integer: true, minimum: 0, maximum: 10 }), limit: s.number({ integer: true, minimum: 1 }) }),
+      ]),
+      notFound: s.boolean(),
+      manifestExamples: s.number({ integer: true, minimum: 0 }),
     }),
     scenarios: s.array(scenario),
     ready,
@@ -125,6 +151,9 @@ export const configSchema: Schema = s.object(
     }),
     reporters: s.array(s.enum(['list', 'json', 'html', 'junit', 'sarif', 'github', 'gitlab'])),
     outputDir: s.string(),
+    screenshots: s.enum(['failures', 'all', 'off']),
+    hooks: s.object({ setup: s.fn(), teardown: s.fn() }),
+    cache: s.boolean(),
     ci: s.object({
       failOn: s.enum(['error', 'warning', 'info', 'never']),
       maxWarnings: s.number({ integer: true, minimum: 0 }),

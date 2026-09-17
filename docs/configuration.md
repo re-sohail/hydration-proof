@@ -26,7 +26,8 @@ Unknown options are errors, with a suggestion when the name looks like a typo.
 | `command` | adapter | Start command. `{port}` is replaced with the chosen port, which is also passed as `PORT` |
 | `build` | adapter | Build command, or `false` |
 | `buildWhen` | `'if-missing'` | `'always'`, `'if-missing'` (no build output yet) or `'never'` |
-| `mode` | `'production'` | `'production'` or `'development'` |
+| `mode` | `'production'` | `'production'`, `'development'` or `'both'` |
+| `devCommand` | adapter | Development server command, used with `mode: 'both'` |
 | `port` | free port | Port for the started app |
 | `cwd` | config directory | Working directory for the commands |
 | `env` | `{}` | Extra environment variables |
@@ -115,7 +116,8 @@ Ignored findings stay in the report, marked as ignored, and do not fail the run.
 | `browser` | `{ name: 'chromium', headless: true }` | Also `channel` for an installed browser |
 | `workers` | half the CPU cores, at most 4 | Pages tested in parallel |
 | `retries` | `0` (`1` on CI) | Retries for pages that fail to load |
-| `reporters` | `['list', 'json']` | Output formats |
+| `reporters` | `['list', 'json', 'html']` | Output formats |
+| `screenshots` | `'failures'` with the html reporter | Screenshots for the HTML report: `'failures'`, `'all'` or `'off'` |
 | `outputDir` | `.hydration-proof/report` | Where reports are written |
 | `ci.failOn` | `'error'` | Lowest severity that fails the run, or `'never'` |
 | `ci.maxWarnings` | | Fail when there are more warnings |

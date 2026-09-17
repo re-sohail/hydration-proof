@@ -5,8 +5,12 @@ import type { NormalizeOptions } from '../dom/normalize.ts';
 import type { RouteRef } from '../report/model.ts';
 import { capturePage, DEFAULT_READY, type PageCapture, type ReadyOptions } from './capture.ts';
 import { createScenarioContext, parseContextOptions, type ScenarioSpec } from './context.ts';
-import { parseDocument, type ParsedDocument } from './parse-stage.ts';
+import { enrichIssues } from './enrich.ts';
+import { parseDocument, screenshot, screenshotServerHtml, type ParsedDocument } from './parse-stage.ts';
 import { mapConcurrent } from './pool.ts';
+import { nodeRects } from './runtime-loader.ts';
+import type { DiagnosisContext } from '../diagnose/index.ts';
+import type { SourceResolver } from '../source/resolve.ts';
 
 export interface PageJob {
   id: string;
@@ -15,6 +19,7 @@ export interface PageJob {
   scenario: ScenarioSpec;
   ready?: Partial<ReadyOptions>;
   expectedStatuses?: readonly number[];
+  expectRedirect?: string;
 }
 
 export interface EngineOptions {
@@ -29,6 +34,15 @@ export interface EngineOptions {
   propsAudit: boolean;
   /** Retry a page whose capture failed to navigate. */
   retries: number;
+  /** Map elements to source files (needs source maps in production). */
+  sourceMaps: boolean;
+  resolver?: SourceResolver;
+  rootDir: string;
+  /** Locale and timezone the app server renders with, when known. */
+  serverEnvironment: DiagnosisContext['server'];
+  screenshots: 'off' | 'failures' | 'all';
+  /** Tallest screenshot, in CSS pixels. */
+  screenshotMaxHeight: number;
 }
 
 export const DEFAULT_ENGINE: EngineOptions = {
@@ -39,7 +53,20 @@ export const DEFAULT_ENGINE: EngineOptions = {
   reportUnusedSuppression: false,
   propsAudit: true,
   retries: 0,
+  sourceMaps: true,
+  rootDir: process.cwd(),
+  serverEnvironment: {},
+  screenshots: 'off',
+  screenshotMaxHeight: 4_000,
 };
+
+export interface PageScreenshots {
+  hydrated?: Buffer;
+  server?: Buffer;
+  width: number;
+  height: number;
+  boxes: { fingerprint: string; x: number; y: number; width: number; height: number }[];
+}
 
 export interface PageRun {
   job: PageJob;
@@ -47,34 +74,23 @@ export interface PageRun {
   parsed?: ParsedDocument;
   parseError?: string;
   analysis: PageAnalysis;
+  screenshots?: PageScreenshots;
   attempts: number;
+}
+
+function diagnosisScenario(scenario: ScenarioSpec): DiagnosisContext['scenario'] {
+  const context = scenario.context;
+  const out: DiagnosisContext['scenario'] = {};
+  if (context.locale !== undefined) out.locale = context.locale;
+  if (context.timezoneId !== undefined) out.timezoneId = context.timezoneId;
+  if (context.colorScheme !== undefined && context.colorScheme !== null) out.colorScheme = context.colorScheme;
+  if (scenario.localStorage || scenario.sessionStorage || context.storageState) out.hasStorage = true;
+  if (context.isMobile || (context.viewport && context.viewport.width < 600)) out.mobile = true;
+  return out;
 }
 
 async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): Promise<Omit<PageRun, 'attempts'>> {
   const context = await createScenarioContext(browser, job.scenario, options.runtime);
-  let capture: PageCapture;
-  try {
-    capture = await capturePage(context, job.url, { ...options.ready, ...job.ready });
-  } finally {
-    await context.close();
-  }
-
-  let parsed: ParsedDocument | undefined;
-  let parseError: string | undefined;
-  if (options.parseStage && capture.document?.body !== undefined) {
-    try {
-      parsed = await parseDocument(
-        browser,
-        capture.document,
-        parseContextOptions(job.scenario.context),
-        'csp',
-        options.runtime.ignoreSelectors ?? [],
-      );
-    } catch (error) {
-      parseError = error instanceof Error ? error.message : String(error);
-    }
-  }
-
   const analyzeOptions: AnalyzeOptions = {
     route: job.route,
     scenario: job.scenario.name,
@@ -83,11 +99,61 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
   };
   if (options.normalize) analyzeOptions.normalize = options.normalize;
   if (job.expectedStatuses) analyzeOptions.expectedStatuses = job.expectedStatuses;
-  const analysis = analyzePage(capture, parsed, analyzeOptions);
+  if (job.expectRedirect !== undefined) analyzeOptions.expectRedirect = job.expectRedirect;
+  const parseOptions = parseContextOptions(job.scenario.context);
 
+  let parsed: ParsedDocument | undefined;
+  let parseError: string | undefined;
+  let analysis: PageAnalysis | undefined;
+  let screenshots: PageScreenshots | undefined;
+  let capture: PageCapture;
+
+  try {
+    capture = await capturePage(context, job.url, { ...options.ready, ...job.ready }, {
+      beforeClose: async (page, result) => {
+        if (options.parseStage && result.document?.body !== undefined) {
+          try {
+            parsed = await parseDocument(browser, result.document, parseOptions, 'csp', options.runtime.ignoreSelectors ?? []);
+          } catch (error) {
+            parseError = error instanceof Error ? error.message : String(error);
+          }
+        }
+        analysis = analyzePage(result, parsed, analyzeOptions);
+        await enrichIssues(page, result, analysis, options.resolver, {
+          rootDir: options.rootDir,
+          sourceMaps: options.sourceMaps,
+          diagnosis: { scenario: diagnosisScenario(job.scenario), server: options.serverEnvironment },
+        });
+
+        const failing = analysis.issues.some((issue) => !issue.ignored && issue.severity !== 'info');
+        if (options.screenshots === 'all' || (options.screenshots === 'failures' && failing)) {
+          const ids = [...new Set(analysis.nodes.values())];
+          const rects = new Map((await nodeRects(page, ids).catch(() => [])).map((rect) => [rect.id, rect]));
+          const boxes: PageScreenshots['boxes'] = [];
+          for (const [fingerprint, id] of analysis.nodes) {
+            const rect = rects.get(id);
+            if (rect) boxes.push({ fingerprint, x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+          }
+          const size = page.viewportSize() ?? { width: 1280, height: 720 };
+          const hydrated = await screenshot(page, options.screenshotMaxHeight);
+          const server = result.document
+            ? await screenshotServerHtml(browser, result.document, parseOptions, options.screenshotMaxHeight)
+            : undefined;
+          screenshots = { width: size.width, height: size.height, boxes };
+          if (hydrated) screenshots.hydrated = hydrated;
+          if (server) screenshots.server = server;
+        }
+      },
+    });
+  } finally {
+    await context.close();
+  }
+
+  analysis ??= analyzePage(capture, undefined, analyzeOptions);
   const run: Omit<PageRun, 'attempts'> = { job, capture, analysis };
   if (parsed) run.parsed = parsed;
   if (parseError !== undefined) run.parseError = parseError;
+  if (screenshots) run.screenshots = screenshots;
   return run;
 }
 

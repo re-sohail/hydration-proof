@@ -91,7 +91,7 @@ function serializeElement(el: Element, hooks: SerializeHooks): SElement | null {
   if (el.localName === 'template' && out.ns === undefined) {
     out.content = serializeChildren((el as HTMLTemplateElement).content, hooks);
   }
-  const shadow = el.shadowRoot ?? closedShadowRoots.get(el);
+  const shadow = el.localName === 'nextjs-portal' ? null : (el.shadowRoot ?? closedShadowRoots.get(el));
   if (shadow) out.shadow = serializeChildren(shadow, hooks);
 
   const form = formState(el);

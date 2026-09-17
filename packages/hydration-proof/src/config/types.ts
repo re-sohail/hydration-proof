@@ -27,13 +27,17 @@ export interface ServerConfig {
   timeout?: number;
   /** Use an app already listening on the URL instead of starting one. Default `true` outside CI. */
   reuseExisting?: boolean;
-  /** Test the production build or the dev server. Default `"production"`. */
-  mode?: BuildMode;
+  /** Test the production build, the dev server, or both (and compare). Default `"production"`. */
+  mode?: BuildMode | 'both';
+  /** Development server command when both modes are tested. Defaults to the adapter's dev command. */
+  devCommand?: string;
 }
 
 export interface RouteEntry {
   /** Path, e.g. `/pricing` or `/products/42?tab=reviews`. */
   path: string;
+  /** The final URL (path) the route must redirect to. Other redirects are reported. */
+  expectRedirect?: string;
   /** Route pattern used for grouping and fingerprints. Defaults to the path without query. */
   pattern?: string;
   /** HTTP statuses that are not errors for this route (e.g. `[404]`). */
@@ -53,8 +57,41 @@ export interface RoutesConfig {
   include?: string[];
   /** Glob patterns of routes to skip. */
   exclude?: string[];
-  /** Find routes from the framework (Next.js app/ and pages/). Default `true` for the Next.js adapter. */
+  /** Find routes from the framework (Next.js app/ and pages/, plus build manifests). Default `true` when `paths` is empty. */
   discover?: boolean;
+  /** Query-string variants per route pattern, e.g. `{ "/search": ["?q=shoes", "?q=&page=2"] }`. */
+  query?: Record<string, string[]>;
+  /** Read routes from the sitemap: `true` for /sitemap.xml (and robots.txt), or a sitemap URL/path. */
+  sitemap?: boolean | string;
+  /** Follow same-origin links found on tested pages. */
+  crawl?: boolean | CrawlConfig;
+  /** Also test a URL that does not exist, to check the not-found page hydrates. Default `true` for Next.js. */
+  notFound?: boolean;
+  /** Most example values taken per dynamic route from build manifests. Default 3. */
+  manifestExamples?: number;
+}
+
+export interface CrawlConfig {
+  /** Link depth from the start routes. Default 2. */
+  depth?: number;
+  /** Maximum number of crawled routes. Default 50. */
+  limit?: number;
+}
+
+export interface MockConfig {
+  /** URL glob (`**` and `*`) or RegExp of browser requests to answer. */
+  url: string | RegExp;
+  method?: string;
+  status?: number;
+  headers?: Record<string, string>;
+  /** Response body; objects are sent as JSON. */
+  body?: unknown;
+}
+
+export interface LoginContext {
+  /** A Playwright page in the scenario's browser context. */
+  page: import('playwright-core').Page;
+  baseUrl: string;
 }
 
 export interface CookieConfig {
@@ -88,6 +125,29 @@ export interface ScenarioConfig {
   sessionStorage?: Record<string, string>;
   /** Scripts run before page scripts (code strings). */
   initScripts?: string[];
+  /**
+   * Sign in once before this scenario's pages are tested. The cookies and
+   * storage it leaves behind are used for every page.
+   */
+  login?: (context: LoginContext) => Promise<void>;
+  /** Answers for browser requests (API fixtures). Server-side requests are not affected. */
+  mocks?: MockConfig[];
+  /** Only test routes matching these globs in this scenario. */
+  include?: string[];
+  /** Skip routes matching these globs in this scenario. */
+  exclude?: string[];
+}
+
+export interface HookContext {
+  baseUrl: string;
+  rootDir: string;
+}
+
+export interface HooksConfig {
+  /** Runs once after the app is up and before any page is tested (seed a database, create users). May return a teardown function. */
+  setup?: (context: HookContext) => Promise<void | (() => Promise<void> | void)> | void | (() => Promise<void> | void);
+  /** Runs once after all pages are tested. */
+  teardown?: (context: HookContext) => Promise<void> | void;
 }
 
 export interface ReadyConfig {
@@ -183,7 +243,12 @@ export interface HydrationProofConfig {
   reporters?: ReporterName[];
   /** Where reports are written. Default `.hydration-proof/report`. */
   outputDir?: string;
+  /** Screenshots for the HTML report: of failing pages (default when the html reporter is on), all pages, or none. */
+  screenshots?: 'failures' | 'all' | 'off';
   ci?: CiConfig;
+  hooks?: HooksConfig;
+  /** Cache discovered routes between runs (keyed by build). Default true. */
+  cache?: boolean;
 }
 
 /** Identity helper that gives `hydration-proof.config.ts` type checking and completion. */
