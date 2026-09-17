@@ -105,6 +105,10 @@
                     "description": "Path, e.g. /pricing.",
                     "type": "string"
                   },
+                  "expectRedirect": {
+                    "description": "Path the route must redirect to.",
+                    "type": "string"
+                  },
                   "pattern": {
                     "description": "Route pattern used for grouping.",
                     "type": "string"
@@ -184,6 +188,54 @@
         },
         "discover": {
           "type": "boolean"
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "sitemap": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "crawl": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          ]
+        },
+        "notFound": {
+          "type": "boolean"
+        },
+        "manifestExamples": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
@@ -314,6 +366,62 @@
             }
           },
           "initScripts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "login": {
+            "description": "A function (JavaScript/TypeScript configs only)."
+          },
+          "mocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "format": "regex",
+                      "description": "A RegExp (JavaScript/TypeScript configs only) or a regular expression source string."
+                    }
+                  ]
+                },
+                "method": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 599
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "body": {
+                  "description": "Response body; objects are sent as JSON."
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude": {
             "type": "array",
             "items": {
               "type": "string"
@@ -505,6 +613,21 @@
         "all",
         "off"
       ]
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "setup": {
+          "description": "A function (JavaScript/TypeScript configs only)."
+        },
+        "teardown": {
+          "description": "A function (JavaScript/TypeScript configs only)."
+        }
+      }
+    },
+    "cache": {
+      "type": "boolean"
     },
     "ci": {
       "type": "object",

@@ -50,6 +50,7 @@ them in ignore rules and baselines.
 | [HP9007](#hp9007) | warning | Some capture data was dropped |
 | [HP9008](#hp9008) | warning | React loaded but never mounted a root |
 | [HP9009](#hp9009) | warning | The page never became quiet |
+| [HP9010](#hp9010) | warning | The route redirected somewhere else |
 
 ## DOM mismatches
 
@@ -543,3 +544,16 @@ How to fix:
 - Increase ready.quietMs/timeout or provide ready.selector for pages with continuous updates.
 
 Online: https://hydration.jscrate.dev/docs/issues/hp9009
+
+### HP9010
+
+**The route redirected somewhere else** · `unexpected-redirect` · default severity: warning
+
+The route ended on a different URL than requested (or than expectRedirect). A signed-in scenario that lands on a login page usually means its login did not work.
+
+How to fix:
+
+- If the redirect is intended, set expectRedirect on the route, or limit the route to the scenarios that can open it (scenario include/exclude).
+- For signed-in scenarios, check the login step or the storage state file.
+
+Online: https://hydration.jscrate.dev/docs/issues/hp9010

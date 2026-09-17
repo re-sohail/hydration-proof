@@ -311,6 +311,23 @@
               "development"
             ]
           },
+          "serverLogs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "config",
+              "discovered",
+              "manifest",
+              "sitemap",
+              "crawl",
+              "not-found"
+            ]
+          },
           "timeline": {
             "type": "array",
             "items": {
@@ -470,7 +487,8 @@
               "HP9006",
               "HP9007",
               "HP9008",
-              "HP9009"
+              "HP9009",
+              "HP9010"
             ]
           },
           "title": {

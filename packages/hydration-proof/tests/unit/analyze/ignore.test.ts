@@ -56,3 +56,31 @@ describe('applyIgnores', () => {
     expect(issues[0]?.ignored).toBeUndefined();
   });
 });
+
+import { analyzeOutcome } from '../../../src/analyze/outcome.ts';
+import type { PageCapture } from '../../../src/engine/capture.ts';
+
+function capture(requestedUrl: string, finalUrl: string): PageCapture {
+  return {
+    startedAt: 0,
+    requestedUrl,
+    finalUrl,
+    outcome: 'hydrated',
+    runtime: { renderers: [], roots: [], commits: [], errors: [], batches: [], snapshots: [], dropped: {}, navigations: 0 },
+    pageErrors: [],
+    consoleMessages: [],
+    timings: { navigation: 0, total: 0 },
+  };
+}
+
+describe('redirect checks', () => {
+  it('warns about unexpected redirects and accepts expected ones', () => {
+    expect(analyzeOutcome(capture('http://h.test/admin', 'http://h.test/admin/'), [])).toEqual([]);
+    const unexpected = analyzeOutcome(capture('http://h.test/admin', 'http://h.test/login'), []);
+    expect(unexpected).toEqual([expect.objectContaining({ code: 'HP9010', severity: 'warning' })]);
+    expect(analyzeOutcome(capture('http://h.test/old', 'http://h.test/new'), [], '/new')).toEqual([]);
+    expect(analyzeOutcome(capture('http://h.test/old', 'http://h.test/other'), [], '/new')).toEqual([
+      expect.objectContaining({ code: 'HP9010', severity: 'error' }),
+    ]);
+  });
+});
