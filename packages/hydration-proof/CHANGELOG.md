@@ -1,5 +1,19 @@
 # hydration-proof
 
+## 0.3.0
+
+### Minor Changes
+
+- Test the whole app, including signed-in areas.
+  
+  - **More routes**: dynamic pages the build pre-rendered are tested automatically (`routes.manifestExamples`), plus the not-found page (`routes.notFound`). `routes.query` adds query-string variants, `--sitemap` / `routes.sitemap` reads `robots.txt`, sitemaps and sitemap indexes, and `--crawl` / `routes.crawl` follows same-origin links. Every page records where its route came from.
+  - **Signed-in pages**: a scenario's `login` function signs in once and its cookies and storage are used for every page. Scenarios can `include` / `exclude` routes, so public, customer and admin areas are tested in one run. A page that ends on another URL is reported as HP9010 (set `expectRedirect` when that is intended).
+  - **API mocks**: `mocks` answer browser requests with fixed data.
+  - **Hooks**: `hooks.setup` (which may return a teardown) and `hooks.teardown` run once the app is up, for seeding data or creating users.
+  - **CI**: `--shard i/n` splits pages across parallel jobs without overlap. Discovered routes are cached per build (`cache`, `--no-cache`).
+  - **Server logs**: error and warning lines the app server printed while a page loaded are attached to the page.
+  - **Production source locations**: with browser source maps, issues now point at the component that rendered the element even when React's production component stack leaves it out. When no location can be shown, the report says whether source maps were missing or only framework code could be mapped.
+
 ## 0.2.0
 
 ### Minor Changes

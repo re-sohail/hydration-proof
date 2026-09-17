@@ -22,6 +22,26 @@ Mark the element with `data-hydration-proof-ignore`, add a selector to `ignore.s
 
 Pages with animations, polling or live data may never be quiet. Set `ready.selector` or `ready.function`, or lower `ready.quietMs`.
 
+## Signed-in pages end on the login page (HP9010)
+
+The scenario's `login` did not leave a working session. Run with `--headed --workers 1` to watch it, check that it waits for the page after signing in (`page.waitForURL`), and check that the session cookie is not limited to another domain. If a route is supposed to redirect, set `expectRedirect` on it.
+
+## "The login of scenario … failed" / "The setup hook failed"
+
+The `login` function or the `setup` hook threw; the message follows. Both run after the app is up, with the same base URL the pages use (`baseUrl`).
+
+## Some dynamic routes are skipped
+
+Dynamic routes are only tested with example values: from `routes.dynamic`, or from pages the build pre-rendered. Add values under `routes.dynamic`, or list the URLs in a sitemap and turn on `routes.sitemap`.
+
+## Routes are missing after adding a page
+
+Discovered routes are cached until the build or a route folder changes. Run with `--no-cache` if a change was missed.
+
+## No source location in production
+
+The issue's `sourceUnavailableReason` says why. Enable browser source maps (`productionBrowserSourceMaps: true` in Next.js) to get the component, or run with `--mode development` for the exact line. Elements rendered by Server Components have no client code to point at.
+
 ## Component names are single letters
 
 Production builds minify component names. Run with `--mode development` to see real component names.

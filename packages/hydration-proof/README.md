@@ -67,7 +67,9 @@ npx hydration-proof init   # creates hydration-proof.config.ts
 npx hydration-proof test
 ```
 
-For a Next.js app, that is all: static routes are discovered from `app/` and `pages/`, the app is built (if needed) and started on a free port, every route is tested, and the process exits with code 1 if something is wrong.
+For a Next.js app, that is all: routes are discovered from `app/`, `pages/` and the build output (dynamic pages the build pre-rendered, the not-found page), the app is built (if needed) and started on a free port, every route is tested, and the process exits with code 1 if something is wrong.
+
+More routes: `--sitemap` adds the pages in your sitemap, and `--crawl` follows the links on tested pages.
 
 Open `.hydration-proof/report/report.html` for the full picture: filters, the server and client values side by side, the code, screenshots with the affected elements outlined, and a timeline of the page. See [reports](https://github.com/re-sohail/hydration-proof/blob/main/docs/reports.md).
 
@@ -100,11 +102,31 @@ export default defineConfig({
 
   // The environments your users have
   scenarios: [
-    { name: 'default' },
+    { name: 'default', exclude: ['/account/**'] },
     { name: 'dark-mobile', colorScheme: 'dark', viewport: 'mobile' },
     { name: 'karachi', locale: 'ur-PK', timezoneId: 'Asia/Karachi' },
-    { name: 'signed-in', storageState: './tests/auth/user.json' },
+    {
+      // Signs in once; every /account page is then tested as this user
+      name: 'customer',
+      include: ['/account/**'],
+      login: async ({ page, baseUrl }) => {
+        await page.goto(`${baseUrl}/login`);
+        await page.fill('#email', process.env.TEST_EMAIL ?? '');
+        await page.fill('#password', process.env.TEST_PASSWORD ?? '');
+        await page.click('button[type=submit]');
+        await page.waitForURL('**/account');
+      },
+      // Answers for API calls made by the browser
+      mocks: [{ url: '**/api/recommendations', body: { items: [] } }],
+    },
   ],
+
+  hooks: {
+    // Seed test data once the app is up
+    setup: async ({ baseUrl }) => {
+      await fetch(`${baseUrl}/api/test/seed`, { method: 'POST' });
+    },
+  },
 
   ignore: {
     selectors: ['.third-party-widget'],
@@ -124,7 +146,7 @@ All options are described in [docs/configuration.md](https://github.com/re-sohai
 - run: npx hydration-proof test
 ```
 
-Exit codes: `0` passed · `1` issues found · `2` configuration error · `3` the app did not start · `4` the browser is missing. Reports are written to `.hydration-proof/report/`. See [docs/ci.md](https://github.com/re-sohail/hydration-proof/blob/main/docs/ci.md).
+Exit codes: `0` passed · `1` issues found · `2` configuration error · `3` the app did not start · `4` the browser is missing. Reports are written to `.hydration-proof/report/`. Split large apps across parallel jobs with `--shard 1/3`, `--shard 2/3`, ... See [docs/ci.md](https://github.com/re-sohail/hydration-proof/blob/main/docs/ci.md).
 
 ## How it works
 

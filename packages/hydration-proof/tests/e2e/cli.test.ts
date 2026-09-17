@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -104,11 +104,14 @@ describe.skipIf(!ready)('hydration-proof test (built CLI)', () => {
           '};',
         ].join('\n'),
       );
-      const result = spawnSync(process.execPath, [cli, 'test', '--url', `http://127.0.0.1:${port}`], {
-        cwd: dir,
-        encoding: 'utf8',
-        env: { ...process.env, CI: '', FORCE_COLOR: '0' },
-        timeout: 120_000,
+      // Asynchronous: the server above runs in this process.
+      const result = await new Promise<{ status: number | null; stderr: string }>((done) => {
+        execFile(
+          process.execPath,
+          [cli, 'test', '--url', `http://127.0.0.1:${port}`],
+          { cwd: dir, env: { ...process.env, CI: '', FORCE_COLOR: '0' }, timeout: 120_000 },
+          (error, _stdout, stderr) => done({ status: error ? (typeof error.code === 'number' ? error.code : null) : 0, stderr }),
+        );
       });
       expect(result.status, result.stderr).toBe(2);
       expect(result.stderr).toContain('The setup hook failed: database is down');
