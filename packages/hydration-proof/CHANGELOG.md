@@ -1,5 +1,34 @@
 # hydration-proof
 
+## 0.9.0
+
+### Minor Changes
+
+- Hardening: security, compatibility and a regression gate.
+  
+  - **Scripts and source maps are only fetched from the app's own origin.** A page can name any URL in a `sourceMappingURL` comment, so without this, testing a page you do not control could make your CI runner fetch from a host of that page's choosing. Add `sourceOrigins: ['https://cdn.example.com']` for apps that serve their bundles from a CDN; the run notes every origin it refused, and findings are still reported without a source location.
+  - **`hydration-proof migrate`** reports the options this version renamed or replaced and, with `--write`, applies the renames that are safe (only when a key appears exactly once in the file, so a `start` inside `projects` or a `"[data-start]"` selector is never touched). The rest is listed as changes to make by hand.
+  - **A regression gate.** `fixtures/captures/` holds a real browser capture of every fixture page; replaying them through the analysis needs no browser and takes under a second, so every pull request and every Node version and OS in the matrix now catches a false positive on a correct page or a lost detection on a broken one.
+  - **Faster:** everything after hydration shares one activity poller, so waiting for effects to settle counts towards `ready.quietMs` instead of restarting it. About 10% less time per page, and the quiet period is now measured from the last actual DOM change.
+  - **Documented:** [security](https://hydration.jscrate.dev/docs/security) (what leaves your machine, redaction, the local dashboard's token and `Host`/`Origin` checks) and an `examples/` directory with copy-paste configs for Next.js, logins, environment matrices, CI, monorepos, plugins and an existing Playwright setup.
+  - The smoke-install matrix covers npm, pnpm, Yarn Classic, Yarn Berry (Plug'n'Play) and Bun; a compatibility workflow runs the fixture suite against other Next.js versions and against React 18.3 and 19.0–19.3.
+
+## 0.8.0
+
+### Minor Changes
+
+- 7cd8f68: Framework adapters, developer tools and plugins.
+  
+  - **Adapters** for React Router (framework mode), Remix, Astro (every island is its own root; pages without React are fine), Vite SSR and custom Node servers, next to Next.js. They build and start the app, discover routes (`react-router routes`, `remix routes`, `src/pages`), ignore framework markup and navigate with the app's router for navigation checks. `adapter` accepts their names.
+  - **`defineAdapter`** (public adapter API) for any other framework: commands, route discovery, normalizers, ignored attributes, client navigation.
+  - **Plugins** (`plugins`, `definePlugin`): normalizers, cause detectors, route providers, reporters and adapters.
+  - **`hydration-proof dev`**: a browser window with an overlay that checks every page you open; highlight the element, open the source line in your editor, copy a Markdown report, re-run.
+  - **`hydration-proof test --watch`**: keeps the development server running and re-tests the routes each change affects.
+  - **`hydration-proof ui`**: a local dashboard (127.0.0.1, token-protected) to run tests, follow their output and read the latest report.
+  - `init` recognizes the new frameworks.
+  - Inline script contents are no longer compared (frameworks render different code on each side), and inserted or removed scripts are not reported.
+  - Card numbers are only redacted when they have a card network prefix and length (timestamps were redacted before).
+
 ## 0.7.0
 
 ### Minor Changes

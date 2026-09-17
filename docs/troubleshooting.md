@@ -42,6 +42,8 @@ Discovered routes are cached until the build or a route folder changes. Run with
 
 The issue's `sourceUnavailableReason` says why. Enable browser source maps (`productionBrowserSourceMaps: true` in Next.js) to get the component, or run with `--mode development` for the exact line. Elements rendered by Server Components have no client code to point at.
 
+If the app serves its bundles from a CDN, the run ends with a note naming the origin it refused: scripts and source maps are only fetched from the app's own origin. Add the CDN to [`sourceOrigins`](configuration.md#sourceorigins).
+
 ## The matrix is too slow
 
 Every environment loads every route. Use the default `strategy: 'pairwise'`, lower `matrix.max`, limit the matrix to some scenarios with `matrix.scenarios`, or run quick local checks with `--no-matrix`. In CI, split the pages with `--shard`.

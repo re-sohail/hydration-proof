@@ -31,7 +31,7 @@ pnpm smoke pnpm           # pack and install into a fresh app (npm|pnpm|yarn|yar
 pnpm build                # build, publint, are-the-types-wrong, size budget (both packages)
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md).
 
 ## License
 

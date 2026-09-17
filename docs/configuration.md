@@ -12,7 +12,12 @@ export default defineConfig({
 
 For JSON configs, point `$schema` at `./node_modules/hydration-proof/schema/config.json` to get completion in your editor.
 
-Unknown options are errors, with a suggestion when the name looks like a typo.
+Unknown options are errors, with a suggestion when the name looks like a typo. If
+a config was written for an older version, `hydration-proof migrate` says what to
+change ([CLI](cli.md#migrate)).
+
+`configVersion` is optional and currently always `1`. Setting it means a future
+version that changes the format can migrate the file instead of guessing.
 
 ## `adapter`
 

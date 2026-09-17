@@ -72,4 +72,7 @@ node scripts/generate-docs.ts --check
 
 ## Releasing
 
-Add a changeset (`pnpm changeset`) describing the change for users. Releases are published from CI with npm trusted publishing.
+Add a changeset (`pnpm changeset`) describing the change for users. Releases are
+published from CI with npm trusted publishing (OIDC), so there is no npm token;
+[RELEASING.md](RELEASING.md) has the full procedure, including the one manual
+first publish each package needs.
