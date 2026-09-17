@@ -427,6 +427,11 @@ export interface HydrationProofConfig {
   redact?: boolean | RedactConfig;
   /** Monorepo: test these projects (each has its own config) in one run. */
   projects?: (string | ProjectConfig)[];
+  /**
+   * Extra origins scripts and source maps may be fetched from, for apps that
+   * serve assets from a CDN. The app's own origin is always allowed.
+   */
+  sourceOrigins?: string[];
 }
 
 /** Identity helper that gives `hydration-proof.config.ts` type checking and completion. */

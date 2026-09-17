@@ -302,7 +302,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     const browser = await browsers(config.browser.name);
 
     if (config.screenshots !== 'off') rmSync(join(config.outputDir, 'screenshots'), { recursive: true, force: true });
-    const resolver = createResolver(config.rootDir);
+    const resolver = createResolver(config.rootDir, config.sourceOrigins);
     const pages: PageResult[] = [];
     const allIssues: Issue[] = [];
     const expired: ExpiredRule[] = [];
@@ -319,6 +319,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
       server = prepared.server;
       const baseUrl = prepared.baseUrl;
       baseUrls.push(baseUrl);
+      resolver.allowOrigin(baseUrl);
       const hookContext = { baseUrl, rootDir: config.rootDir };
       let teardown: (() => Promise<void> | void) | undefined;
       try {
@@ -585,6 +586,11 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
       notes.push(`Baseline written to ${baselineName}: ${next.entries.length} finding${next.entries.length === 1 ? '' : 's'}.`);
     }
 
+    if (resolver.blocked.size > 0) {
+      notes.push(
+        `Source maps were not fetched from ${[...resolver.blocked].join(', ')} (only the app's own origin is used). Add sourceOrigins to the config to allow them.`,
+      );
+    }
     if (notes.length > printedNotes) write(`\n${notes.slice(printedNotes).map((note) => `  ${note}\n`).join('')}`);
     const failures = policy(config, report, expired, expiredBaseline);
     const exitCode = failures.length > 0 ? ExitCode.Failed : ExitCode.Ok;

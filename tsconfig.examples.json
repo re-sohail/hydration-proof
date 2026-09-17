@@ -1,0 +1,16 @@
+{
+  // The examples are copy-paste recipes, so they are type checked against the
+  // real config types: an option that is renamed breaks them here first.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "isolatedDeclarations": false,
+    "declaration": false,
+    "declarationMap": false,
+    "paths": {
+      "hydration-proof": ["./packages/hydration-proof/src/index.ts"]
+    }
+  },
+  "include": ["examples", "packages/hydration-proof/src/virtual.d.ts"]
+}

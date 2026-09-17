@@ -354,3 +354,26 @@ hooks: {
 | `owners` | CODEOWNERS | Route owners and CODEOWNERS lookup ([owners](ci.md#owners)) |
 | `redact` | on | Remove secrets and personal data from reports: `false`, or `{ builtIn, patterns, selectors }` ([details](ci.md#personal-data-and-secrets)) |
 | `projects` | | Monorepo apps to test, each with its own config ([monorepos](ci.md#monorepos)) |
+| `sourceOrigins` | | Extra origins scripts and source maps may be loaded from ([below](#sourceorigins)) |
+
+### `sourceOrigins`
+
+To report a `file:line`, hydration-proof downloads the scripts of the page and
+their source maps. It only fetches them from the origin of the app it is
+testing. If the app serves its bundles from a CDN, allow that origin as well:
+
+```ts
+sourceOrigins: ['https://cdn.example.com'];
+```
+
+Only the origin is used, so a path or a full URL of a file works too. Anything
+else is compared to the origin and skipped, and the run notes the origins it
+refused:
+
+```text
+Source maps were not fetched from https://cdn.example.com (only the app's own
+origin is used). Add sourceOrigins to the config to allow them.
+```
+
+Findings are still reported without a source location when this happens; see
+[security](security.md#the-network).

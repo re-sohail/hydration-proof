@@ -1,0 +1,113 @@
+name: Compatibility
+
+# Detection must not depend on one exact framework version, so the fixture
+# suite runs again against other Next.js and React releases. This is slow, so
+# it runs on a schedule and on demand rather than on every pull request.
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/hydration-proof/src/runtime/**'
+      - 'packages/hydration-proof/src/errors/**'
+      - 'packages/hydration-proof/src/adapters/next.ts'
+      - 'packages/hydration-proof/src/dom/normalize.ts'
+      - '.github/workflows/compat.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  next-versions:
+    name: Next ${{ matrix.next }} (App Router + Pages Router)
+    strategy:
+      fail-fast: false
+      matrix:
+        # The version in the repository, the previous minor, and the previous major.
+        next: ['16.3.5', '16.2.4', '15.5.7']
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Pin Next.js
+        run: node scripts/set-versions.ts --next ${{ matrix.next }}
+
+      # The lockfile is for the pinned versions, so it is allowed to change here.
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter hydration-proof exec playwright-core install --with-deps chromium
+
+      - name: Which versions are actually installed
+        run: pnpm --filter "@fixtures/next-app" exec next --version
+
+      # The e2e project needs no harness, so only the two Next.js apps are rebuilt.
+      - run: node scripts/fixtures-build.ts --force next-app next-pages
+
+      - name: Fixture detection (production builds)
+        run: pnpm --filter hydration-proof exec vitest run --project e2e tests/e2e/fixtures.test.ts
+        env:
+          # Development servers are covered by ci.yml on the pinned version.
+          HP_E2E_DEV: '0'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fixtures-next-${{ matrix.next }}
+          path: packages/hydration-proof/test-results
+
+  react-versions:
+    name: React ${{ matrix.react }} (Pages Router + custom SSR)
+    strategy:
+      fail-fast: false
+      matrix:
+        # The App Router always uses Next's bundled React, so the installed
+        # version only matters for the Pages Router and for custom SSR.
+        react: ['18.3.1', '19.0.0', '19.1.1', '19.2.0', '19.3.0']
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Pin React
+        # The React 18 harness stays on 18.3.1; only the 19 harness and the
+        # Pages Router app follow the matrix.
+        run: node scripts/set-versions.ts --react ${{ matrix.react }} --apps next-pages,ssr-react19
+
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter hydration-proof exec playwright-core install --with-deps chromium firefox webkit
+
+      - name: Which versions are actually installed
+        run: pnpm --filter "@fixtures/ssr-react19" exec node -e "console.log(require('react-dom/package.json').version)"
+
+      - run: node scripts/fixtures-build.ts --force next-pages ssr-react18 ssr-react19
+
+      - name: Hook, rewind, props audit and diff against this React
+        run: pnpm --filter hydration-proof test:browser
+
+      - name: Fixture detection (production builds)
+        run: pnpm --filter hydration-proof exec vitest run --project e2e tests/e2e/fixtures.test.ts
+        env:
+          HP_E2E_DEV: '0'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fixtures-react-${{ matrix.react }}
+          path: packages/hydration-proof/test-results

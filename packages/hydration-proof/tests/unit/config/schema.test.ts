@@ -106,6 +106,7 @@ const everything: Required<HydrationProofConfig> = {
   owners: { routes: { '/checkout/**': ['@acme/payments'], '/blog/**': '@acme/content' }, codeowners: '.github/CODEOWNERS' },
   redact: { builtIn: true, patterns: [/ORDER-\d+/], selectors: ['.credit-card'] },
   projects: ['apps/web', { path: 'apps/admin', name: 'admin', config: 'hydration-proof.config.ts' }],
+  sourceOrigins: ['https://cdn.example.com'],
   plugins: [
     {
       name: 'acme',

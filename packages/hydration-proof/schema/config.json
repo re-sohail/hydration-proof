@@ -94,6 +94,9 @@
             "notFound": {
               "type": "boolean"
             },
+            "pagesWithoutReact": {
+              "type": "boolean"
+            },
             "sourcePath": {
               "description": "A function (JavaScript/TypeScript configs only)."
             }
@@ -1390,6 +1393,13 @@
           }
         }
       ]
+    },
+    "sourceOrigins": {
+      "type": "array",
+      "items": {
+        "description": "Origin, e.g. https://cdn.example.com.",
+        "type": "string"
+      }
     },
     "projects": {
       "type": "array",

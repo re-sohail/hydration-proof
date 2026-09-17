@@ -13,6 +13,7 @@ hydration-proof <command> [options]
 | `dev` | Open the app in a browser with the hydration overlay ([development tools](dev.md)) |
 | `ui` | Start the local dashboard (`--open`, `--port`) |
 | `install [browser...]` | Download browsers for the Playwright version hydration-proof uses (`chromium` by default) |
+| `migrate` | Report config options that were renamed or replaced, and apply the safe renames with `--write` |
 | `doctor` | Check Node.js, Playwright, browsers, the config file and framework detection |
 
 Run `hydration-proof <command> --help` for the options of a command.
@@ -68,6 +69,35 @@ hydration-proof merge-reports shards/1 shards/2 shards/3 --output .hydration-pro
 | `--fail-on <level>` | `error` (default), `warning`, `info` or `never` |
 
 Each argument is a report folder or a `report.json` file. Screenshots are copied next to the merged report.
+
+## `migrate`
+
+```text
+hydration-proof migrate [--write]
+```
+
+Reads the config without validating it, then lists the options this version
+renamed or replaced:
+
+```text
+2 changes for hydration-proof.config.ts
+  server.start → server.command
+    The start command is `server.command`.
+  normalize.maskText → redact.patterns
+    Text masking is now redaction (it applies to every report). Move the patterns to `redact: { patterns: [...] }`.
+```
+
+| Option | Description |
+| --- | --- |
+| `-c, --config <file>` | Config file. Default: the one `test` would use |
+| `--write` | Apply the renames that are safe and keep the old file as `<file>.backup` |
+
+`--write` only renames a key when it appears exactly once in the file, so a
+`start` inside `projects` or a `"[data-start]"` selector is never touched. Anything
+that needs a judgement call (moving `normalize.maskText` to `redact.patterns`,
+splitting `interactions` into `checks.interactions`) is listed as a change to make
+by hand. Exit code 0 when the config is current or the changes were reported, 2
+when there is no config file or it has options this version does not know.
 
 ## Exit codes
 

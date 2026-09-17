@@ -273,7 +273,7 @@ export async function readDocument(response: Response, bodyTimeout: number): Pro
   return document;
 }
 
-class Poller {
+export class Poller {
   private lastActivity = -1;
   private quietSince = Date.now();
   loadedAt: number | undefined;
@@ -339,9 +339,14 @@ async function waitForHydration(page: Page, options: ReadyOptions, deadline: num
   return 'hydration-timeout';
 }
 
-export async function waitForQuiet(page: Page, quietMs: number, pollMs: number, deadline: number): Promise<boolean> {
-  const poller = new Poller(page);
+/**
+ * Waits until the page has not changed for `quietMs`. Pass a `poller` that has
+ * been watching since the last known activity to count the time that was
+ * already quiet; a fresh one starts counting now.
+ */
+export async function waitForQuiet(page: Page, quietMs: number, pollMs: number, deadline: number, poller: Poller = new Poller(page)): Promise<boolean> {
   await poller.poll();
+  if (poller.quietFor() >= quietMs) return true;
   while (Date.now() < deadline) {
     await sleep(pollMs);
     await poller.poll();
@@ -468,14 +473,18 @@ export async function completeCapture(
   }
   await drainInto(page, runtime);
 
+  // One poller for everything after hydration: waiting for effects to settle is
+  // itself quiet time, so it counts towards `quietMs` instead of restarting it.
+  // Taking a snapshot is not activity, so it does not reset the clock either.
+  const poller = new Poller(page);
   if (capture.outcome === 'hydrated' || capture.outcome === 'hydration-stalled') {
-    await waitForQuiet(page, options.effectQuietMs, options.pollMs, deadline);
+    await waitForQuiet(page, options.effectQuietMs, options.pollMs, deadline, poller);
     const seq = await snapshotNow(page, 'post-effect');
     if (seq !== undefined) capture.postEffectSnapshot = seq;
   }
 
   const userReady = await waitForUserReady(page, options, deadline);
-  const quiet = await waitForQuiet(page, options.quietMs, options.pollMs, deadline);
+  const quiet = await waitForQuiet(page, options.quietMs, options.pollMs, deadline, poller);
   if (!userReady || !quiet) capture.readyTimedOut = true;
   const stable = await snapshotNow(page, 'stable');
   if (stable !== undefined) capture.stableSnapshot = stable;

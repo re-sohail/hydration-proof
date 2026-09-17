@@ -110,6 +110,57 @@ describe('SourceResolver', () => {
     expect(await resolver.hasSourceMap('http://localhost/b.js')).toBe(false);
   });
 
+  it('only fetches scripts and source maps from allowed origins', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'hp-resolve-'));
+    const map = { version: 3, sources: ['turbopack:///[project]/app/page.tsx'], mappings: 'AACE,UAAS' };
+    const scripts: Record<string, string> = {
+      'http://localhost:3000/app.js': 'console.log(1);\n//# sourceMappingURL=/app.js.map\n',
+      'http://localhost:3000/app.js.map': JSON.stringify(map),
+      'http://cdn.example.com/vendor.js': 'console.log(2);\n//# sourceMappingURL=vendor.js.map\n',
+      'http://cdn.example.com/vendor.js.map': JSON.stringify(map),
+      // A map hosted somewhere else than the script it belongs to.
+      'http://localhost:3000/split.js': 'console.log(3);\n//# sourceMappingURL=http://maps.example.com/split.js.map\n',
+      'http://maps.example.com/split.js.map': JSON.stringify(map),
+    };
+    const fetched: string[] = [];
+    const resolver = new SourceResolver({
+      rootDir: dir,
+      fetchText: async (url) => {
+        fetched.push(url);
+        return scripts[url];
+      },
+    });
+    resolver.allowOrigin('http://localhost:3000/some/page');
+    expect(await resolver.hasSourceMap('http://localhost:3000/app.js')).toBe(true);
+    expect(await resolver.hasSourceMap('http://cdn.example.com/vendor.js')).toBe(false);
+    expect(await resolver.hasSourceMap('http://maps.example.com/split.js.map')).toBe(false);
+    // The script is allowed, but its map lives on another origin.
+    expect(await resolver.hasSourceMap('http://localhost:3000/split.js')).toBe(false);
+    expect(fetched).toEqual(['http://localhost:3000/app.js', 'http://localhost:3000/app.js.map', 'http://localhost:3000/split.js']);
+    expect([...resolver.blocked].sort()).toEqual(['http://cdn.example.com', 'http://maps.example.com']);
+
+    // Adding the CDN lets it through (a fresh resolver, because results are cached).
+    const second = new SourceResolver({ rootDir: dir, fetchText: async (url) => scripts[url], origins: ['http://localhost:3000', 'http://cdn.example.com'] });
+    expect(await second.hasSourceMap('http://cdn.example.com/vendor.js')).toBe(true);
+    expect([...second.blocked]).toEqual([]);
+  });
+
+  it('allows any origin when none is configured, and refuses non-URLs when one is', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'hp-resolve-'));
+    const script = `console.log(1);\n//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbImEudHN4Il0sIm1hcHBpbmdzIjoiQUFBQSJ9\n`;
+    const open = new SourceResolver({ rootDir: dir, fetchText: async () => script });
+    expect(await open.hasSourceMap('http://anywhere.example/x.js')).toBe(true);
+    expect([...open.blocked]).toEqual([]);
+
+    const closed = new SourceResolver({ rootDir: dir, fetchText: async () => script, origins: ['http://localhost:3000'] });
+    // An unparseable "URL" is never fetched; it is also not reported as an origin.
+    expect(await closed.resolveFunction('console.log(1)', ['webpack-internal:///./app/page.tsx'])).toBeUndefined();
+    expect([...closed.blocked]).toEqual([]);
+    // A bad value in the config is ignored rather than opening every origin.
+    closed.allowOrigin('not a url');
+    expect(await closed.hasSourceMap('http://anywhere.example/x.js')).toBe(false);
+  });
+
   it('finds bundler-relative paths in parent folders (monorepos)', () => {
     dir = mkdtempSync(join(tmpdir(), 'hp-resolve-'));
     mkdirSync(join(dir, 'packages', 'ui'), { recursive: true });

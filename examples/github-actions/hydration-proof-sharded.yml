@@ -1,0 +1,83 @@
+# Large app: the routes are split across parallel jobs, then the reports are
+# merged and the CI policy is applied once over everything.
+# Docs: https://hydration.jscrate.dev/docs/ci
+name: Hydration (sharded)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The slowest step, so it is cached on the lockfile.
+      - name: Browser cache
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm exec hydration-proof install --with-deps chromium
+
+      # A shard must not fail on its own findings, or the other shards are
+      # cancelled before they report; the merge job decides the outcome.
+      - run: pnpm exec hydration-proof test --shard ${{ matrix.shard }}/4 --fail-on never --reporter json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shard-${{ matrix.shard }}
+          path: .hydration-proof/report
+          retention-days: 3
+
+  report:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shard-*
+          path: shards
+
+      # One report, one exit code: the budget and the baseline are applied to
+      # every finding of the run rather than to each shard separately.
+      - run: pnpm exec hydration-proof merge-reports shards/shard-* --output .hydration-proof/report
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('.hydration-proof/report/report.sarif') != ''
+        with:
+          sarif_file: .hydration-proof/report/report.sarif
+          category: hydration-proof
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hydration-report
+          path: .hydration-proof/report
+          retention-days: 14

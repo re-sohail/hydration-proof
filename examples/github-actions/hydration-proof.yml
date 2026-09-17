@@ -1,0 +1,45 @@
+# Written by `hydration-proof init --ci github` in a pnpm project.
+# Finds React hydration problems on every pull request.
+# Docs: https://hydration.jscrate.dev/docs/ci
+name: Hydration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  # Upload findings to code scanning (SARIF).
+  security-events: write
+
+jobs:
+  hydration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Lets "--changed" compare with the base branch.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec hydration-proof install --with-deps chromium
+      # Annotations and the job summary are added automatically on GitHub Actions.
+      # For large apps, add "--changed" on pull requests, or split with "--shard 1/3".
+      - run: pnpm exec hydration-proof test --reporter list,html,json,github,sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('.hydration-proof/report/report.sarif') != ''
+        with:
+          sarif_file: .hydration-proof/report/report.sarif
+          category: hydration-proof
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hydration-report
+          path: .hydration-proof/report
+          retention-days: 14

@@ -1,12 +1,18 @@
 // Builds the fixture apps when their sources changed since the last build.
-// Usage: node scripts/fixtures-build.ts [--force]
+// Usage: node scripts/fixtures-build.ts [--force] [app...]
+//
+// Naming apps builds only those (plus the SSR harnesses when named), which is
+// what the compatibility matrix uses after changing a framework version.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixturesDir } from './lib/fixtures.ts';
 
-const force = process.argv.includes('--force');
+const args = process.argv.slice(2);
+const force = args.includes('--force');
+const only = new Set(args.filter((arg) => !arg.startsWith('--')));
+const wanted = (app: string): boolean => only.size === 0 || only.has(app);
 
 function newestMtime(dir: string): number {
   let newest = 0;
@@ -30,7 +36,14 @@ const APPS: [app: string, output: string, dependsOnShared: boolean][] = [
   ['vite-ssr', 'dist/server/entry-server.js', false],
   ['astro-react', 'dist/server/entry.mjs', false],
 ];
+const unknown = [...only].filter((app) => !APPS.some(([name]) => name === app) && app !== 'ssr-react18' && app !== 'ssr-react19');
+if (unknown.length > 0) {
+  console.error(`Unknown fixture app: ${unknown.join(', ')}`);
+  process.exit(2);
+}
+
 for (const [app, output, dependsOnShared] of APPS) {
+  if (!wanted(app)) continue;
   const dir = join(fixturesDir, app);
   const marker = join(dir, output);
   const newest = Math.max(dependsOnShared ? shared : 0, newestMtime(dir));
@@ -48,5 +61,6 @@ for (const [app, output, dependsOnShared] of APPS) {
 }
 
 for (const harness of ['ssr-react18', 'ssr-react19']) {
+  if (!wanted(harness)) continue;
   execFileSync(process.execPath, ['build.ts'], { cwd: join(fixturesDir, harness), stdio: 'inherit' });
 }

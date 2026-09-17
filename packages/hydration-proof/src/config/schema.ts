@@ -310,6 +310,7 @@ export const configSchema: Schema = s.object(
       s.boolean(),
       s.object({ builtIn: s.boolean(), patterns: s.array(s.regexp()), selectors: s.array(s.string()) }),
     ]),
+    sourceOrigins: s.array(s.string({ description: 'Origin, e.g. https://cdn.example.com.' })),
     projects: s.array(
       s.union([
         s.string(),

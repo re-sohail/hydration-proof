@@ -193,6 +193,8 @@ export interface ResolvedConfig {
   redact: false | { builtIn: boolean; patterns: RegExp[]; selectors: string[] };
   changed?: { ref: string | true };
   projects: ResolvedProject[];
+  /** Extra origins scripts and source maps may be fetched from. */
+  sourceOrigins: string[];
   hooks: HooksConfig;
   cache: boolean;
   shard?: { index: number; total: number };
@@ -447,6 +449,7 @@ export function resolveConfig(
             selectors: (typeof config.redact === 'object' ? config.redact.selectors : undefined) ?? [],
           },
     projects: [],
+    sourceOrigins: config.sourceOrigins ?? [],
     hooks: {},
     cache: true,
     probes: false,

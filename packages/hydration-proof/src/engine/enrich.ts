@@ -43,10 +43,14 @@ export function runDetectors(issue: Issue, detectors: readonly CauseDetector[], 
 
 const MINIFIED = /^[A-Za-z_$][\w$]?$/;
 
-/** One resolver per run, so scripts and source maps are fetched once. */
-export function createResolver(rootDir: string): SourceResolver {
+/**
+ * One resolver per run, so scripts and source maps are fetched once. Only
+ * `origins` are fetched from (the app and any extra origins in the config).
+ */
+export function createResolver(rootDir: string, origins: readonly string[] = []): SourceResolver {
   return new Resolver({
     rootDir,
+    origins,
     fetchText: async (url) => {
       try {
         const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });

@@ -106,19 +106,46 @@ function decodeDataUrl(url: string): string | undefined {
 export class SourceResolver {
   private readonly fetchText: FetchText;
   private readonly rootDir: string;
+  /** Origins scripts and source maps may be fetched from (empty: any). */
+  private readonly origins = new Set<string>();
+  /** Origins that were refused, for one note per run. */
+  readonly blocked: Set<string> = new Set();
   private readonly maps = new Map<string, Promise<SourceMap | undefined>>();
   private readonly scripts = new Map<string, Promise<string | undefined>>();
 
-  constructor(options: { fetchText: FetchText; rootDir: string }) {
+  constructor(options: { fetchText: FetchText; rootDir: string; origins?: readonly string[] }) {
     this.fetchText = options.fetchText;
     this.rootDir = options.rootDir;
+    for (const origin of options.origins ?? []) this.allowOrigin(origin);
+  }
+
+  /** Allow scripts and source maps from this origin (the app, its CDN). */
+  allowOrigin(url: string): void {
+    try {
+      this.origins.add(new URL(url).origin);
+    } catch {
+      // Not a URL: ignored.
+    }
+  }
+
+  private allowed(url: string): boolean {
+    if (this.origins.size === 0) return true;
+    let origin: string;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      return false;
+    }
+    if (this.origins.has(origin)) return true;
+    this.blocked.add(origin);
+    return false;
   }
 
   private scriptText(scriptUrl: string): Promise<string | undefined> {
     const key = scriptUrl.split('#')[0]!;
     let pending = this.scripts.get(key);
     if (!pending) {
-      pending = this.fetchText(key);
+      pending = this.allowed(key) ? this.fetchText(key) : Promise.resolve(undefined);
       this.scripts.set(key, pending);
     }
     return pending;
@@ -133,7 +160,7 @@ export class SourceResolver {
         if (!script) return undefined;
         const url = sourceMapUrl(script, key);
         if (!url) return undefined;
-        const text = url.startsWith('data:') ? decodeDataUrl(url) : await this.fetchText(url);
+        const text = url.startsWith('data:') ? decodeDataUrl(url) : this.allowed(url) ? await this.fetchText(url) : undefined;
         if (!text) return undefined;
         try {
           return new SourceMap(text);

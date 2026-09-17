@@ -11,6 +11,8 @@
 - [Plugins](plugins.md): normalizers, cause detectors, route providers and reporters
 - [Development tools](dev.md): the overlay, watch mode and the dashboard
 - [ESLint plugin](eslint.md): rules that catch hydration problems while you write code ([rule reference](rules/))
+- [Security](security.md): what leaves your machine, redaction and the local dashboard
 - [Troubleshooting](troubleshooting.md)
+- [Examples](../examples/): copy-paste configs for Next.js, logins, matrices, CI, monorepos and plugins
 
 The published documentation site is https://hydration.jscrate.dev.

@@ -63,6 +63,33 @@ jobs:
           name: fixture-results
           path: packages/hydration-proof/test-results
 
+  smoke-install:
+    name: Install with ${{ matrix.manager }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        # yarn is Yarn Classic; yarn-pnp is Yarn Berry with Plug'n'Play, where
+        # the package is loaded out of a zip archive.
+        manager: [npm, pnpm, yarn, yarn-pnp, bun]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - if: matrix.manager == 'bun'
+        uses: oven-sh/setup-bun@v2
+      - run: pnpm install --frozen-lockfile
+      # The smoke app runs the published bin, so the browser must be there.
+      - run: pnpm --filter hydration-proof exec playwright-core install --with-deps chromium
+      - name: Build the package that will be packed
+        run: pnpm --filter hydration-proof build
+      - run: node scripts/smoke-install.ts ${{ matrix.manager }}
+
   node-versions:
     name: Node ${{ matrix.node }} on ${{ matrix.os }}
     strategy:

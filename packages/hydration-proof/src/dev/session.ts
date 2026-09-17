@@ -129,7 +129,7 @@ export async function devSession(options: DevOptions): Promise<number> {
     const baseUrl = prepared.baseUrl;
     const repository = repositoryRoot(config.rootDir);
     const normalize = normalizeOptions(config, adapter);
-    const resolver = createResolver(config.rootDir);
+    const resolver = createResolver(config.rootDir, [baseUrl, ...config.sourceOrigins]);
     const ready: ReadyOptions = {
       ...DEFAULT_READY,
       quietMs: config.ready.quietMs,
