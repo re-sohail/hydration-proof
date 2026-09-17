@@ -1,0 +1,13 @@
+{
+  // Tests, scripts and config files. Same strictness, no declaration rules
+  // because none of these files ship.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "isolatedDeclarations": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["tests", "scripts", "*.config.ts"]
+}

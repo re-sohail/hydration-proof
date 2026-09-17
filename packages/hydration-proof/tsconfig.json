@@ -1,0 +1,10 @@
+{
+  // Node side: CLI, engine, diff, reporters. No DOM types, so browser globals
+  // can't leak into code that runs in Node.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": ["src/runtime", "src/report/client", "dist", "node_modules"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@fixtures/ssr-shared",
+  "private": true,
+  "type": "module",
+  "description": "Pages and server shared by the React 18 and React 19 SSR harnesses. Has no React dependency of its own: each harness injects its React copy.",
+  "devDependencies": {
+    "rolldown": "1.2.9"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@fixtures/ssr-react18",
+  "private": true,
+  "type": "module",
+  "description": "React 18 SSR harness (renderToString / renderToPipeableStream on node:http).",
+  "scripts": {
+    "build": "node build.ts",
+    "start": "node serve.ts"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@fixtures/ssr-shared": "workspace:*"
+  }
+}

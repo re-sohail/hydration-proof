@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+*.tgz
+*.log
+*.tsbuildinfo
+.DS_Store
+.vscode/
+.idea/
+.env
+.env.*
+!.env.example
+
+# Fixture build output and tool output
+.next/
+.hydration-proof/
+test-results/
+.cache/
+.browser-build/

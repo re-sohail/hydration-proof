@@ -1,0 +1,13 @@
+{
+  // Code that is bundled to IIFE and runs inside the page under test.
+  // DOM types only; Node types must never be visible here.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "isolatedDeclarations": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/runtime", "src/report/client", "src/shared"]
+}

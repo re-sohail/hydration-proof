@@ -1,0 +1,88 @@
+{
+  "name": "hydration-proof",
+  "version": "0.0.0",
+  "description": "Find, explain, reproduce and prevent React hydration mismatches before users see them. Compares real server HTML with the hydrated DOM in CI. Next.js, React 18 and 19. Adds nothing to your production bundle.",
+  "keywords": [
+    "hydration",
+    "hydration-error",
+    "hydration-mismatch",
+    "react-hydration",
+    "ssr",
+    "server-side-rendering",
+    "nextjs",
+    "next.js",
+    "react",
+    "react-19",
+    "suppresshydrationwarning",
+    "playwright",
+    "testing",
+    "ci",
+    "cli",
+    "dom-diff"
+  ],
+  "license": "MIT",
+  "author": "Sohail Khan (https://me.jscrate.dev)",
+  "homepage": "https://hydration.jscrate.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/re-sohail/hydration-proof.git",
+    "directory": "packages/hydration-proof"
+  },
+  "bugs": {
+    "url": "https://github.com/re-sohail/hydration-proof/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "hydration-proof": "./dist/cli.js"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "build": "pnpm run build:browser && tsdown && node scripts/check-package.ts",
+    "build:browser": "tsdown -c tsdown.browser.config.ts",
+    "build:fast": "pnpm run build:browser && tsdown",
+    "dev": "pnpm run build:browser && tsdown --watch",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.browser.json && tsc -p tsconfig.tools.json",
+    "test": "vitest run --project unit --project browser",
+    "test:unit": "vitest run --project unit",
+    "test:browser": "vitest run --project browser",
+    "test:e2e": "vitest run --project e2e",
+    "test:watch": "vitest --project unit",
+    "lint:publint": "publint --strict",
+    "lint:attw": "attw --pack . --profile esm-only",
+    "size": "node scripts/size-report.ts",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "playwright-core": "^1.63.0"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@types/node": "^22.20.3",
+    "ajv": "^8.20.0",
+    "publint": "0.3.24",
+    "tsdown": "0.23.0",
+    "typescript": "6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

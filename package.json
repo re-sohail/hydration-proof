@@ -1,0 +1,27 @@
+{
+  "name": "hydration-proof-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.26.1",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter \"./packages/*\" build",
+    "typecheck": "pnpm --filter \"./packages/*\" typecheck",
+    "test": "pnpm --filter \"./packages/*\" test",
+    "test:unit": "pnpm --filter hydration-proof test:unit",
+    "test:browser": "pnpm --filter hydration-proof test:browser",
+    "test:e2e": "pnpm --filter hydration-proof test:e2e",
+    "fixtures:build": "node scripts/fixtures-build.ts",
+    "verify:fixtures": "node scripts/verify-fixtures.ts",
+    "measure": "node scripts/measure.ts",
+    "changeset": "changeset",
+    "release": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "3.0.3",
+    "@types/node": "^22.20.3",
+    "typescript": "6.0.3"
+  }
+}
