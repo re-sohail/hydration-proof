@@ -1,6 +1,6 @@
 {
   "name": "eslint-plugin-hydration-proof",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "ESLint rules that stop React hydration mismatches before they ship: time, randomness, browser globals, storage, locale and timezone formatting, unstable ids, invalid HTML nesting and suppressHydrationWarning misuse in render code. Flat config, ESLint 9 and 10.",
   "keywords": [
     "eslint",
