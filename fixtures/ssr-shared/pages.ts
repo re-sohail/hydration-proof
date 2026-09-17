@@ -133,6 +133,15 @@ export function createPages(React: ReactLike): Record<string, PageDef> {
       head: '<script>document.addEventListener("DOMContentLoaded",function(){var p=document.getElementById("target");p.setAttribute("data-extension","1");p.firstChild.data="changed by script"})</script>',
       App: () => h(Layout, null, h('p', { id: 'target' }, 'original')),
     },
+    'noscript-head': {
+      stream: false,
+      head: '<noscript><img src="/pixel.gif" alt=""></noscript><meta name="after-noscript" content="1">',
+      App: () => h(Layout, null, h('p', null, 'noscript in head')),
+    },
+    'invalid-nesting': {
+      stream: false,
+      App: () => h(Layout, null, h('p', { id: 'outer' }, h('div', { id: 'inner' }, 'block in paragraph'))),
+    },
     'reset-suspense': {
       stream: false,
       App: () => {

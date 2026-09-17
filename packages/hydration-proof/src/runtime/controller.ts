@@ -190,6 +190,7 @@ export function startRuntime(options: RuntimeOptions): RuntimeApi {
       didError,
       pendingBefore,
       pendingAfter,
+      readyState: document.readyState,
     };
     if (kind !== 'update') {
       commit.snapshot = takeSnapshot('hydration', seq);

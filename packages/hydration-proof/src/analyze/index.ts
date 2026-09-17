@@ -1,0 +1,253 @@
+import type { CommitInfo } from '../shared/protocol.ts';
+import type { PageCapture } from '../engine/capture.ts';
+import type { ParsedDocument } from '../engine/parse-stage.ts';
+import { DEFAULT_NORMALIZE, type NormalizeOptions } from '../dom/normalize.ts';
+import { isElement, walk } from '../dom/tree.ts';
+import { fingerprint } from '../issues/fingerprint.ts';
+import { docsUrl, issueDefinition, type Severity } from '../issues/registry.ts';
+import { suggestionsFor } from '../issues/suggestions.ts';
+import type { Issue, PageStatus, ReactInfo, RouteRef } from '../report/model.ts';
+import type { Draft } from './draft.ts';
+import { analyzeErrors, isWarningKind, standaloneDraft, type ReactReport } from './errors.ts';
+import { analyzeExternal } from './external.ts';
+import { analyzeHydration } from './hydration.ts';
+import { analyzeMarkup } from './markup.ts';
+import { analyzeOutcome } from './outcome.ts';
+
+export interface AnalyzeOptions {
+  route: RouteRef;
+  scenario: string;
+  normalize?: NormalizeOptions;
+  /** Report suppressHydrationWarning that suppresses nothing (HP6003). */
+  reportUnusedSuppression?: boolean;
+  /** HTTP statuses that are expected for this route. */
+  expectedStatuses?: readonly number[];
+}
+
+export interface PageAnalysis {
+  issues: Issue[];
+  status: PageStatus;
+  react?: ReactInfo;
+}
+
+const STRUCTURAL = new Set(['HP1001', 'HP1007', 'HP1008', 'HP1009', 'HP1015', 'HP1010', 'HP1011']);
+
+function commitFor(report: ReactReport, commits: CommitInfo[]): number | undefined {
+  const { error } = report;
+  const fromCallback = error.source === 'recoverable' || error.source === 'caught' || error.source === 'uncaught';
+  if (fromCallback && error.commit !== undefined) return error.commit;
+  // Console output is logged while React renders, i.e. before its commit.
+  const next = commits.find((commit) => commit.kind !== 'update' && commit.time >= error.time);
+  return next?.seq ?? error.commit;
+}
+
+function sameAnchor(draft: Draft, anchors: readonly string[]): boolean {
+  return anchors.some(
+    (anchor) =>
+      draft.anchor === anchor ||
+      draft.nodeAnchors?.includes(anchor) === true ||
+      (draft.selector !== undefined && (draft.selector === anchor || draft.selector.startsWith(`${anchor} `))),
+  );
+}
+
+function absorb(target: Draft, source: Draft): void {
+  for (const entry of source.evidence) {
+    if (!target.evidence.some((existing) => existing.message === entry.message)) target.evidence.push(entry);
+  }
+  if (source.message !== target.message) {
+    target.evidence.push({ kind: 'dom-change', message: source.message });
+  }
+  target.component ??= source.component;
+  target.componentStack ??= source.componentStack;
+  target.commit ??= source.commit;
+}
+
+function merge(drafts: Draft[], reports: ReactReport[], commits: CommitInfo[]): Draft[] {
+  const markup = drafts.filter((draft) => draft.code === 'HP3001' || draft.code === 'HP3002');
+  const external = drafts.filter((draft) => draft.code === 'HP4001' || draft.code === 'HP4002');
+  const dropped = new Set<Draft>();
+
+  // 1. Structural differences caused by invalid nesting belong to the markup issue.
+  for (const issue of markup) {
+    const anchors = issue.related ?? (issue.anchor ? [issue.anchor] : []);
+    if (anchors.length === 0) continue;
+    for (const draft of drafts) {
+      if (draft === issue || dropped.has(draft) || !STRUCTURAL.has(draft.code)) continue;
+      if (sameAnchor(draft, anchors)) {
+        absorb(issue, draft);
+        dropped.add(draft);
+      }
+    }
+  }
+
+  // 2. Hydration differences on elements a script changed first belong to that change.
+  for (const issue of external) {
+    if (!issue.anchor) continue;
+    for (const draft of drafts) {
+      if (draft === issue || dropped.has(draft) || draft.stage !== 'hydration') continue;
+      if (!sameAnchor(draft, [issue.anchor])) continue;
+      const sameValue = draft.server !== undefined && draft.server === issue.client;
+      const sameAttribute = draft.attribute !== undefined && draft.attribute === issue.attribute;
+      if (sameValue || sameAttribute || STRUCTURAL.has(draft.code)) {
+        absorb(issue, draft);
+        dropped.add(draft);
+      }
+    }
+  }
+
+  const kept = drafts.filter((draft) => !dropped.has(draft));
+
+  // 3. React's own reports become evidence for findings of the same commit.
+  for (const report of reports) {
+    const commit = commitFor(report, commits);
+    let targets = kept.filter((draft) => draft.commit !== undefined && draft.commit === commit);
+    if (report.message.kind === 'nesting-warning') {
+      const nesting = kept.filter((draft) => draft.code === 'HP3001' || draft.code === 'HP3002');
+      if (nesting.length > 0) targets = nesting;
+    }
+    if (targets.length === 0) {
+      // Fold into a markup/external issue when those explain the commit's failure.
+      const explained = [...markup, ...external].filter((draft) => !dropped.has(draft) && draft.severity !== 'info');
+      if (explained.length > 0 && !isWarningKind(report.message)) targets = explained.slice(0, 1);
+    }
+    if (targets.length === 0) {
+      const standalone = standaloneDraft(report);
+      if (standalone) kept.push(standalone);
+      continue;
+    }
+    const primary = targets[0]!;
+    if (!primary.evidence.some((entry) => entry.message === report.evidence.message)) primary.evidence.push(report.evidence);
+    if (report.error.componentStack && !primary.componentStack) {
+      primary.componentStack = report.error.componentStack.trim();
+    }
+  }
+  return kept;
+}
+
+function toIssue(draft: Draft, options: AnalyzeOptions): Issue {
+  const definition = issueDefinition(draft.code);
+  const input: Parameters<typeof fingerprint>[0] = { code: draft.code, routePattern: options.route.pattern };
+  if (draft.selector !== undefined) input.selector = draft.selector;
+  if (draft.attribute !== undefined) input.attribute = draft.attribute;
+  if (draft.key !== undefined && draft.selector === undefined) input.key = draft.key;
+  const issue: Issue = {
+    fingerprint: fingerprint(input),
+    code: draft.code,
+    title: definition.title,
+    severity: draft.severity ?? definition.severity,
+    confidence: Math.round(draft.confidence * 100) / 100,
+    message: draft.message,
+    route: options.route,
+    scenario: options.scenario,
+    stage: draft.stage,
+    evidence: draft.evidence,
+    suggestions: suggestionsFor(draft.code),
+    docsUrl: docsUrl(draft.code),
+  };
+  if (draft.selector !== undefined) issue.selector = draft.selector;
+  if (draft.domPath !== undefined) issue.domPath = draft.domPath;
+  if (draft.attribute !== undefined) issue.attribute = draft.attribute;
+  if (draft.server !== undefined) issue.server = draft.server;
+  if (draft.client !== undefined) issue.client = draft.client;
+  if (draft.component !== undefined) issue.component = draft.component;
+  if (draft.componentStack !== undefined) issue.componentStack = draft.componentStack;
+  if (draft.suppressed) issue.suppressed = true;
+  if (issue.source === undefined) {
+    issue.sourceUnavailableReason = 'Source mapping is not enabled in this version.';
+  }
+  return issue;
+}
+
+function dedupe(issues: Issue[]): Issue[] {
+  const byFingerprint = new Map<string, Issue>();
+  for (const issue of issues) {
+    const existing = byFingerprint.get(issue.fingerprint);
+    if (!existing) {
+      byFingerprint.set(issue.fingerprint, issue);
+      continue;
+    }
+    for (const entry of issue.evidence) {
+      if (!existing.evidence.some((known) => known.message === entry.message)) existing.evidence.push(entry);
+    }
+    existing.confidence = Math.max(existing.confidence, issue.confidence);
+  }
+  return [...byFingerprint.values()];
+}
+
+const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+
+export function pageStatus(capture: PageCapture, issues: Issue[]): PageStatus {
+  if (capture.outcome === 'navigation-failed') return 'error';
+  const active = issues.filter((issue) => !issue.ignored);
+  if (active.some((issue) => issue.severity === 'error')) return 'failed';
+  if (active.some((issue) => issue.severity === 'warning')) return 'warning';
+  return 'passed';
+}
+
+function reactInfo(capture: PageCapture): ReactInfo | undefined {
+  const renderer = capture.runtime.renderers[0];
+  if (!renderer) return undefined;
+  return {
+    version: renderer.version,
+    build: renderer.bundleType === 0 ? 'production' : renderer.bundleType === 1 ? 'development' : 'unknown',
+    roots: capture.runtime.roots.map((root) => ({ selector: root.containerSelector, mode: root.mode })),
+  };
+}
+
+export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undefined, options: AnalyzeOptions): PageAnalysis {
+  const normalize = options.normalize ?? DEFAULT_NORMALIZE;
+  const { runtime } = capture;
+  const drafts: Draft[] = [...analyzeOutcome(capture, options.expectedStatuses ?? [])];
+
+  const errorAnalysis = analyzeErrors(runtime.errors);
+  drafts.push(...errorAnalysis.drafts);
+
+  const containers = new Set(runtime.roots.map((root) => root.container));
+  const hydration = analyzeHydration({
+    commits: runtime.commits,
+    batches: runtime.batches,
+    snapshots: runtime.snapshots,
+    containers,
+    normalize,
+    reportUnusedSuppression: options.reportUnusedSuppression ?? false,
+  });
+  drafts.push(...hydration.drafts);
+
+  const body = capture.document?.body;
+  if (parsed && body !== undefined) {
+    drafts.push(...analyzeMarkup(body, parsed.tree));
+    const first = hydration.events[0];
+    if (first) {
+      const snapshot = runtime.snapshots.find((entry) => entry.seq === first.commit.snapshot);
+      const reactOwned = new Set<number>();
+      if (snapshot) {
+        walk(snapshot.tree, (node) => {
+          if (isElement(node) && node.client) reactOwned.add(node.id);
+        });
+      }
+      const streamBatches = runtime.batches.filter(
+        (batch) => batch.phase === 'react-stream' && batch.time <= first.commit.time,
+      );
+      drafts.push(
+        ...analyzeExternal({
+          parsed: parsed.tree,
+          preHydration: first.preTree,
+          streamBatches,
+          normalize,
+          reactOwned,
+          documentLoading: first.commit.readyState === 'loading',
+          containers,
+        }),
+      );
+    }
+  }
+
+  const merged = merge(drafts, errorAnalysis.reports, runtime.commits);
+  const issues = dedupe(merged.map((draft) => toIssue(draft, options))).sort(
+    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.code.localeCompare(b.code),
+  );
+  const analysis: PageAnalysis = { issues, status: pageStatus(capture, issues) };
+  const react = reactInfo(capture);
+  if (react) analysis.react = react;
+  return analysis;
+}

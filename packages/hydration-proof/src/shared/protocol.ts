@@ -211,6 +211,8 @@ export interface CommitInfo {
   pendingAfter: number;
   /** Snapshot taken inside this commit (hydration kinds only). */
   snapshot?: number;
+  /** document.readyState at commit time; 'loading' means the HTML was still streaming. */
+  readyState: string;
 }
 
 export type ErrorSource =

@@ -1,0 +1,9 @@
+{
+  "name": "@fixtures/cdn-proxy",
+  "private": true,
+  "type": "module",
+  "description": "A reverse proxy that rewrites HTML the way CDN optimizers do (whitespace minification, email obfuscation).",
+  "scripts": {
+    "start": "node server.ts"
+  }
+}

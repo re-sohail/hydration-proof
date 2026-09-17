@@ -1,0 +1,22 @@
+{
+  "name": "@fixtures/next-app",
+  "private": true,
+  "type": "module",
+  "description": "Next.js App Router fixture (bundled React 19).",
+  "scripts": {
+    "build": "next build",
+    "start": "next start -p ${PORT:-3100}",
+    "dev": "next dev -p ${PORT:-3100}"
+  },
+  "dependencies": {
+    "@fixtures/next-cases": "workspace:*",
+    "next": "16.3.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "dependenciesMeta": {
+    "@fixtures/next-cases": {
+      "injected": true
+    }
+  }
+}
