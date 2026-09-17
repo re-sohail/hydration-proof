@@ -7,6 +7,9 @@
 - [Issue codes](issues.md): what each finding means and how to fix it
 - [Likely causes](causes.md): how causes are diagnosed and fixed
 - [Reports](reports.md): terminal, JSON, HTML and CI reports
+- [Frameworks and adapters](adapters.md): Next.js, React Router, Remix, Astro, Vite SSR, custom servers, and writing an adapter
+- [Plugins](plugins.md): normalizers, cause detectors, route providers and reporters
+- [Development tools](dev.md): the overlay, watch mode and the dashboard
 - [ESLint plugin](eslint.md): rules that catch hydration problems while you write code ([rule reference](rules/))
 - [Troubleshooting](troubleshooting.md)
 

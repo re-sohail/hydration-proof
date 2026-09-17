@@ -1,26 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { MarkerRule } from '../dom/normalize.ts';
 import { getAttr, isElement, isText } from '../dom/tree.ts';
 import { discoverNextRoutes } from '../routes/next.ts';
 import { execCommand, runScript } from '../util/package-manager.ts';
 import type { Adapter } from './types.ts';
 
-interface PackageJson {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  scripts?: Record<string, string>;
-}
-
-function readPackage(rootDir: string): PackageJson | undefined {
-  try {
-    return JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8')) as PackageJson;
-  } catch {
-    return undefined;
-  }
-}
-
-const NEXT_CONFIGS = ['next.config.js', 'next.config.mjs', 'next.config.cjs', 'next.config.ts', 'next.config.mts'];
+import { configFiles, hasAnyFile, hasDependency, readPackage } from './package.ts';
 
 export const nextMarkers: MarkerRule[] = [
   {
@@ -47,9 +31,7 @@ export const nextMarkers: MarkerRule[] = [
 export const nextAdapter: Adapter = {
   name: 'next',
   detect(rootDir) {
-    const pkg = readPackage(rootDir);
-    if (pkg?.dependencies?.['next'] || pkg?.devDependencies?.['next']) return true;
-    return NEXT_CONFIGS.some((file) => existsSync(join(rootDir, file)));
+    return hasDependency(readPackage(rootDir), 'next') || hasAnyFile(rootDir, configFiles('next.config'));
   },
   commands({ rootDir, packageManager }) {
     const pkg = readPackage(rootDir);
@@ -58,7 +40,7 @@ export const nextAdapter: Adapter = {
       build: hasBuildScript ? runScript(packageManager, 'build') : execCommand(packageManager, 'next', 'build'),
       start: execCommand(packageManager, 'next', 'start --port {port}'),
       dev: execCommand(packageManager, 'next', 'dev --port {port}'),
-      buildOutput: join('.next', 'BUILD_ID'),
+      buildOutput: '.next/BUILD_ID',
     };
   },
   discoverRoutes({ rootDir }) {
@@ -66,6 +48,7 @@ export const nextAdapter: Adapter = {
   },
   markers: nextMarkers,
   devHost: 'localhost',
+  notFound: true,
   navigation: {
     // App Router and Pages Router both expose their router as window.next.router.
     navigate: `(url) => { const router = window.next && window.next.router; if (!router || typeof router.push !== 'function') return false; void Promise.resolve(router.push(url)).catch(() => {}); return true; }`,

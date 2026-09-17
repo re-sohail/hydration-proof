@@ -96,7 +96,7 @@ export function formatIssues(issues: SchemaIssue[]): string {
   return issues.map((issue) => `  • ${issue.path} ${issue.message}`).join('\n');
 }
 
-export async function loadConfig(options: { cwd: string; file?: string }): Promise<LoadedConfig> {
+export async function loadConfig(options: { cwd: string; file?: string; validate?: boolean }): Promise<LoadedConfig> {
   const file = options.file
     ? isAbsolute(options.file)
       ? options.file
@@ -109,7 +109,7 @@ export async function loadConfig(options: { cwd: string; file?: string }): Promi
   if (value === undefined || value === null) {
     throw new ConfigError(`${file} has no default export. Export the config with \`export default defineConfig({ ... })\`.`, file);
   }
-  const issues = validateConfig(value);
+  const issues = options.validate === false ? [] : validateConfig(value);
   if (issues.length > 0) {
     throw new ConfigError(`Invalid configuration in ${file}:\n${formatIssues(issues)}`, file, issues);
   }

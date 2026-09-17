@@ -7,8 +7,12 @@ import { join, relative, sep } from 'node:path';
 export interface DiscoveredRoute {
   pattern: string;
   dynamic: boolean;
-  router: 'app' | 'pages';
+  /** Which file convention the route comes from. */
+  router: 'app' | 'pages' | 'react-router' | 'astro';
+  /** Route file, relative to the project root. */
   file: string;
+  /** Files of the layouts that wrap the route (relative to the project root), when the framework lists them. */
+  wrappers?: string[];
   /** Statuses the route is expected to answer with. */
   expectStatus?: number[];
   /** A layout of the route renders parallel routes (`@slot` folders): client navigation keeps other slots. */

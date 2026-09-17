@@ -352,7 +352,8 @@
               "manifest",
               "sitemap",
               "crawl",
-              "not-found"
+              "not-found",
+              "plugin"
             ]
           },
           "baseScenario": {

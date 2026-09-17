@@ -28,6 +28,8 @@ export interface AnalyzeOptions {
   propsAudit?: boolean;
   /** The path the route must redirect to. */
   expectRedirect?: string;
+  /** Pages without React are expected (the adapter says so). */
+  allowNoReact?: boolean;
 }
 
 export interface PageAnalysis {
@@ -239,7 +241,7 @@ function reactInfo(capture: PageCapture): ReactInfo | undefined {
 export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undefined, options: AnalyzeOptions): PageAnalysis {
   const normalize = options.normalize ?? DEFAULT_NORMALIZE;
   const { runtime } = capture;
-  const drafts: Draft[] = [...analyzeOutcome(capture, options.expectedStatuses ?? [], options.expectRedirect)];
+  const drafts: Draft[] = [...analyzeOutcome(capture, options.expectedStatuses ?? [], options.expectRedirect, options.allowNoReact ?? false)];
 
   const errorAnalysis = analyzeErrors(runtime.errors);
   drafts.push(...errorAnalysis.drafts);

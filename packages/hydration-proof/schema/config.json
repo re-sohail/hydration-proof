@@ -14,12 +14,194 @@
     },
     "adapter": {
       "description": "Framework adapter.",
-      "type": "string",
-      "enum": [
-        "auto",
-        "next",
-        "none"
+      "anyOf": [
+        {
+          "description": "auto, next, react-router, remix, astro, vite, node, none, or the name of a plugin adapter.",
+          "type": "string"
+        },
+        {
+          "description": "An adapter from defineAdapter().",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "detect": {
+              "description": "A function (JavaScript/TypeScript configs only)."
+            },
+            "commands": {
+              "description": "A function (JavaScript/TypeScript configs only)."
+            },
+            "discoverRoutes": {
+              "description": "A function (JavaScript/TypeScript configs only)."
+            },
+            "markers": {
+              "type": "array",
+              "items": {}
+            },
+            "ignoreAttributes": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string",
+                    "format": "regex",
+                    "description": "A RegExp (JavaScript/TypeScript configs only) or a regular expression source string."
+                  }
+                ]
+              }
+            },
+            "elementAttributes": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "string",
+                      "format": "regex",
+                      "description": "A RegExp (JavaScript/TypeScript configs only) or a regular expression source string."
+                    }
+                  ]
+                }
+              }
+            },
+            "devHost": {
+              "type": "string"
+            },
+            "navigation": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "navigate": {
+                  "type": "string"
+                },
+                "prefetch": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "navigate"
+              ]
+            },
+            "notFound": {
+              "type": "boolean"
+            },
+            "sourcePath": {
+              "description": "A function (JavaScript/TypeScript configs only)."
+            }
+          },
+          "required": [
+            "name",
+            "detect",
+            "commands",
+            "markers"
+          ]
+        }
       ]
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "description": "A plugin from definePlugin().",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "adapters": {
+            "type": "array",
+            "items": {}
+          },
+          "normalizers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "match": {
+                  "description": "A function (JavaScript/TypeScript configs only)."
+                }
+              },
+              "required": [
+                "name",
+                "match"
+              ]
+            }
+          },
+          "ignoreAttributes": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string",
+                  "format": "regex",
+                  "description": "A RegExp (JavaScript/TypeScript configs only) or a regular expression source string."
+                }
+              ]
+            }
+          },
+          "detectors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "detect": {
+                  "description": "A function (JavaScript/TypeScript configs only)."
+                }
+              },
+              "required": [
+                "name",
+                "detect"
+              ]
+            }
+          },
+          "reporters": {
+            "type": "array",
+            "items": {}
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "routes": {
+                  "description": "A function (JavaScript/TypeScript configs only)."
+                }
+              },
+              "required": [
+                "name",
+                "routes"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
     },
     "server": {
       "type": "object",

@@ -20,7 +20,9 @@ describe('normalizeTree', () => {
     const { tree: out, dropped } = normalizeTree(tree);
     const div = out.children[0] as { children: { tag?: string }[] };
     expect(div.children.map((node) => node.tag)).toEqual(['p', 'script']);
-    expect(new Set(dropped.values())).toEqual(new Set(['react-comment', 'react-stream-holder', 'react-stream-script']));
+    // The app's own script stays, but its content is never compared.
+    expect(new Set(dropped.values())).toEqual(new Set(['react-comment', 'react-stream-holder', 'react-stream-script', 'opaque']));
+    expect((div.children[1] as unknown as { children: unknown[] }).children).toEqual([]);
   });
 
   it('masks nonce values and keeps <noscript> opaque', () => {

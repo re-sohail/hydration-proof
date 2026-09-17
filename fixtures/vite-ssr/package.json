@@ -1,0 +1,21 @@
+{
+  "name": "@fixtures/vite-ssr",
+  "private": true,
+  "type": "module",
+  "description": "Plain Vite 8 SSR fixture without a framework (node:http, streaming renderToPipeableStream, React 19).",
+  "scripts": {
+    "build": "vite build --outDir dist/client && vite build --ssr src/entry-server.jsx --outDir dist/server",
+    "start": "NODE_ENV=production node server.js",
+    "dev": "node server.js",
+    "hydration-proof": "hydration-proof test"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "hydration-proof": "workspace:*",
+    "vite": "^8.3.0"
+  }
+}

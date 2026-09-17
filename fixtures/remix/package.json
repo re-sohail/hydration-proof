@@ -1,0 +1,26 @@
+{
+  "name": "@fixtures/remix",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Remix v2 fixture (classic Vite plugin, Vite 6, React 18).",
+  "scripts": {
+    "build": "remix vite:build",
+    "start": "remix-serve ./build/server/index.js",
+    "dev": "remix vite:dev --port ${PORT:-5174}",
+    "hydration-proof": "hydration-proof test"
+  },
+  "dependencies": {
+    "@remix-run/node": "^2.17.5",
+    "@remix-run/react": "^2.17.5",
+    "@remix-run/serve": "^2.17.5",
+    "isbot": "^5.2.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@remix-run/dev": "^2.17.5",
+    "hydration-proof": "workspace:*",
+    "vite": "^6.4.3"
+  }
+}

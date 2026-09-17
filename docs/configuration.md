@@ -16,7 +16,11 @@ Unknown options are errors, with a suggestion when the name looks like a typo.
 
 ## `adapter`
 
-`'auto'` (default), `'next'` or `'none'`. The Next.js adapter is chosen automatically when `next` is a dependency. It knows how to build and start the app and discovers routes from `app/` and `pages/`.
+`'auto'` (default), `'next'`, `'react-router'`, `'remix'`, `'astro'`, `'vite'`, `'node'`, `'none'`, the name of a plugin adapter, or an adapter from `defineAdapter()`. With `'auto'`, the adapter is chosen from `package.json`. Adapters know how to build and start the app, where its routes are and which markup the framework adds. See [Frameworks and adapters](adapters.md).
+
+## `plugins`
+
+Plugins add normalizers, cause detectors, route providers, reporters and adapters. See [Plugins](plugins.md).
 
 ## `server`
 

@@ -25,7 +25,8 @@ function quote(value: string | null | undefined): string {
   return JSON.stringify(flat.length > 100 ? `${flat.slice(0, 99)}…` : flat);
 }
 
-function issueLines(issue: Issue, c: Palette): string[] {
+/** Terminal lines for one finding. */
+export function issueLines(issue: Issue, c: Palette): string[] {
   const color = issue.severity === 'error' ? c.red : issue.severity === 'warning' ? c.yellow : c.cyan;
   const cause = issue.cause ? c.gray(`  (${causeText(issue)})`) : '';
   const flaky = issue.flaky && issue.occurrences ? c.yellow(`  flaky ${issue.occurrences.seen}/${issue.occurrences.runs}`) : '';

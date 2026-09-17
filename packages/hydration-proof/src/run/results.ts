@@ -8,8 +8,9 @@ import type { Adapter } from '../adapters/index.ts';
 import type { ResolvedConfig } from '../config/resolve.ts';
 import type { BuildMode } from '../config/types.ts';
 import type { DiagnosisContext } from '../diagnose/index.ts';
-import { DEFAULT_NORMALIZE, genericMarkers, reactMarkers, type NormalizeOptions } from '../dom/normalize.ts';
+import { DEFAULT_NORMALIZE, genericMarkers, opaqueScripts, reactMarkers, type NormalizeOptions } from '../dom/normalize.ts';
 import type { PageRun, PageScreenshots } from '../engine/run.ts';
+import { toMarker } from '../plugins/index.ts';
 import type { LogLine } from '../engine/server.ts';
 import type { Severity } from '../issues/registry.ts';
 import type { Issue, PageResult, Report, Screenshots, Summary } from '../report/model.ts';
@@ -31,8 +32,21 @@ export function serverEnvironment(config: ResolvedConfig): DiagnosisContext['ser
 export function normalizeOptions(config: ResolvedConfig, adapter: Adapter): NormalizeOptions {
   return {
     ...DEFAULT_NORMALIZE,
-    markers: [...reactMarkers, ...genericMarkers, ...adapter.markers],
-    ignoreAttributes: config.ignore.attributes.map((pattern) => (typeof pattern === 'string' ? pattern.toLowerCase() : pattern)),
+    markers: [
+      ...reactMarkers,
+      ...genericMarkers,
+      ...adapter.markers,
+      ...config.plugins.flatMap((plugin) => (plugin.normalizers ?? []).map(toMarker)),
+      opaqueScripts,
+    ],
+    ignoreAttributes: [
+      ...(adapter.ignoreAttributes ?? []),
+      ...config.plugins.flatMap((plugin) => plugin.ignoreAttributes ?? []),
+      ...config.ignore.attributes,
+    ].map((pattern) =>
+      typeof pattern === 'string' ? pattern.toLowerCase() : pattern,
+    ),
+    ...(adapter.elementAttributes ? { elementAttributes: adapter.elementAttributes } : {}),
   };
 }
 

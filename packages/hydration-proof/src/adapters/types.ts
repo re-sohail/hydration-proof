@@ -8,6 +8,8 @@ export interface AdapterContext {
 }
 
 export interface AdapterCommands {
+  /** Environment for the app server (for example HOST). */
+  env?: Record<string, string>;
   /** Production build command, if the framework needs one. */
   build?: string;
   /** Production server; `{port}` is replaced. */
@@ -26,7 +28,7 @@ export interface AdapterNavigation {
   prefetch?: string;
 }
 
-/** Framework integration. Internal in 0.1; public from 0.8. */
+/** Framework integration: how to build, start and discover an app, and what to ignore in its HTML. */
 export interface Adapter {
   name: string;
   detect(rootDir: string): boolean;
@@ -34,7 +36,17 @@ export interface Adapter {
   discoverRoutes?(context: AdapterContext): DiscoveredRoute[];
   /** Framework markers removed before comparing DOM stages. */
   markers: MarkerRule[];
+  /** Attributes the framework adds or changes on its own (never compared). */
+  ignoreAttributes?: readonly (string | RegExp)[];
+  /** Attributes the framework changes on its own wrapper elements, by tag name. */
+  elementAttributes?: Readonly<Record<string, readonly (string | RegExp)[]>>;
   /** Host to use for the dev server (Next.js blocks other origins). */
   devHost?: string;
   navigation?: AdapterNavigation;
+  /** Also load a URL that does not exist, to check the not-found page (default false). */
+  notFound?: boolean;
+  /** Pages without React are normal (islands architectures); they are not reported. */
+  pagesWithoutReact?: boolean;
+  /** Label for source paths in reports, e.g. strip a bundler prefix. */
+  sourcePath?(source: string): string | undefined;
 }

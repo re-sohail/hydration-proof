@@ -106,6 +106,17 @@ const everything: Required<HydrationProofConfig> = {
   owners: { routes: { '/checkout/**': ['@acme/payments'], '/blog/**': '@acme/content' }, codeowners: '.github/CODEOWNERS' },
   redact: { builtIn: true, patterns: [/ORDER-\d+/], selectors: ['.credit-card'] },
   projects: ['apps/web', { path: 'apps/admin', name: 'admin', config: 'hydration-proof.config.ts' }],
+  plugins: [
+    {
+      name: 'acme',
+      adapters: [],
+      normalizers: [{ name: 'chat', match: () => undefined }],
+      ignoreAttributes: ['data-acme', /^data-track-/],
+      detectors: [{ name: 'flags', detect: () => undefined }],
+      reporters: [{ name: 'slack', onEnd: () => undefined }],
+      routes: [{ name: 'cms', routes: () => ['/pages/about'] }],
+    },
+  ],
   hooks: {
     setup: async () => async () => {},
     teardown: () => {},
@@ -177,7 +188,7 @@ describe('config schema', () => {
     const validate = ajv.compile(configJsonSchema());
     // RegExps (and functions) have no JSON form.
     const scenarios = everything.scenarios.map((scenario) => ({ ...scenario, mocks: scenario.mocks?.filter((mock) => typeof mock.url === 'string') }));
-    const { interactions: _functionsOnly, redact: _regexps, ...rest } = everything;
+    const { interactions: _functionsOnly, redact: _regexps, plugins: _plugins, ...rest } = everything;
     const json = JSON.parse(JSON.stringify({ ...rest, scenarios, ignore: { selectors: ['.ad'], attributes: ['x'] } }));
     expect(validate(json), JSON.stringify(validate.errors)).toBe(true);
     expect(validate({ unknown: true })).toBe(false);

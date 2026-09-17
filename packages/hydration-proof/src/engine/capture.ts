@@ -117,15 +117,15 @@ export function networkType(request: Request): NetworkEntry['type'] | undefined 
   return undefined;
 }
 
-/** Record script and RSC requests of a page into `into`. */
-export function trackNetwork(page: Page, into: NetworkEntry[]): void {
+/** Record script and RSC requests of a page into `into`; returns a function that stops recording. */
+export function trackNetwork(page: Page, into: NetworkEntry[]): () => void {
   const entry = (request: Request, type: NetworkEntry['type']): NetworkEntry => {
     const timing = request.timing();
     const out: NetworkEntry = { url: request.url(), type, start: timing.startTime };
     if (type === 'rsc' && request.headers()['next-router-prefetch'] !== undefined) out.prefetch = true;
     return out;
   };
-  page.on('requestfinished', (request) => {
+  const onFinished = (request: Request): void => {
     const type = networkType(request);
     if (!type || into.length >= MAX_NETWORK_ENTRIES) return;
     const item = entry(request, type);
@@ -138,14 +138,20 @@ export function trackNetwork(page: Page, into: NetworkEntry[]): void {
         if (response) item.status = response.status();
       })
       .catch(() => {});
-  });
-  page.on('requestfailed', (request) => {
+  };
+  const onFailed = (request: Request): void => {
     const type = networkType(request);
     if (!type || into.length >= MAX_NETWORK_ENTRIES) return;
     const item = entry(request, type);
     item.failure = request.failure()?.errorText ?? 'failed';
     into.push(item);
-  });
+  };
+  page.on('requestfinished', onFinished);
+  page.on('requestfailed', onFailed);
+  return () => {
+    page.off('requestfinished', onFinished);
+    page.off('requestfailed', onFailed);
+  };
 }
 
 export interface PageCapture {
@@ -390,6 +396,102 @@ export interface CaptureHooks {
  * Load `url` in a fresh page of `context` (which must already carry the
  * runtime init script) and capture every stage the runtime can see.
  */
+export interface PageRecorder {
+  capture: PageCapture;
+  /** Stop listening to the page. */
+  dispose(): void;
+}
+
+/** Start recording what a page does (errors, console output, requests) for one document. */
+export function recordPage(page: Page, url: string, started: number = Date.now()): PageRecorder {
+  const pageErrors: PageCapture['pageErrors'] = [];
+  const consoleMessages: BrowserMessage[] = [];
+  const onError = (error: Error): void => {
+    const entry: PageCapture['pageErrors'][number] = { message: error.message, at: Date.now() };
+    if (error.stack !== undefined) entry.stack = error.stack;
+    pageErrors.push(entry);
+  };
+  const onConsole = (message: import('playwright-core').ConsoleMessage): void => {
+    const type = message.type();
+    if (type !== 'error' && type !== 'warning') return;
+    const location = message.location();
+    consoleMessages.push({ type, text: message.text(), url: location.url, line: location.lineNumber, column: location.columnNumber });
+  };
+  page.on('pageerror', onError);
+  page.on('console', onConsole);
+  const capture: PageCapture = {
+    startedAt: started,
+    requestedUrl: url,
+    finalUrl: url,
+    outcome: 'navigation-failed',
+    runtime: emptyRuntime(),
+    pageErrors,
+    consoleMessages,
+    timings: { navigation: 0, total: 0 },
+    network: [],
+  };
+  const network = trackNetwork(page, capture.network);
+  return {
+    capture,
+    dispose() {
+      page.off('pageerror', onError);
+      page.off('console', onConsole);
+      network();
+    },
+  };
+}
+
+/**
+ * Everything after the document response arrived: wait for hydration, take
+ * the post-effect and stable snapshots, read the server HTML.
+ */
+export async function completeCapture(
+  page: Page,
+  capture: PageCapture,
+  response: Response | null,
+  options: ReadyOptions,
+  hooks: Pick<CaptureHooks, 'beforeHydration' | 'beforeClose'> = {},
+): Promise<PageCapture> {
+  const started = capture.startedAt;
+  const deadline = started + options.timeout;
+  const runtime = capture.runtime;
+  capture.timings.navigation = Date.now() - started;
+  // The request start in real time (a fixed browser clock also fakes performance.timeOrigin).
+  const requestStart = response?.request().timing().startTime;
+  capture.timeOrigin = requestStart !== undefined && requestStart > 0 ? requestStart : started;
+  const documentPromise = response ? readDocument(response, options.bodyTimeout) : undefined;
+  await hooks.beforeHydration?.(page);
+
+  capture.outcome = await waitForHydration(page, options, deadline);
+  if (capture.outcome === 'hydrated' || capture.outcome === 'client-only') {
+    capture.timings.hydration = Date.now() - started;
+  }
+  await drainInto(page, runtime);
+
+  if (capture.outcome === 'hydrated' || capture.outcome === 'hydration-stalled') {
+    await waitForQuiet(page, options.effectQuietMs, options.pollMs, deadline);
+    const seq = await snapshotNow(page, 'post-effect');
+    if (seq !== undefined) capture.postEffectSnapshot = seq;
+  }
+
+  const userReady = await waitForUserReady(page, options, deadline);
+  const quiet = await waitForQuiet(page, options.quietMs, options.pollMs, deadline);
+  if (!userReady || !quiet) capture.readyTimedOut = true;
+  const stable = await snapshotNow(page, 'stable');
+  if (stable !== undefined) capture.stableSnapshot = stable;
+  await drainInto(page, runtime);
+
+  capture.finalUrl = page.url();
+  if (documentPromise) capture.document = await documentPromise;
+  capture.timings.total = Date.now() - started;
+  await hooks.beforeClose?.(page, capture);
+  return capture;
+}
+
+/**
+ * Load `url` in a fresh page of `context` (which must already carry the
+ * runtime init script) and capture every stage the runtime can see.
+ */
 export async function capturePage(
   context: BrowserContext,
   url: string,
@@ -397,42 +499,9 @@ export async function capturePage(
   hooks: CaptureHooks = {},
 ): Promise<PageCapture> {
   const started = Date.now();
-  const deadline = started + options.timeout;
   const page = await context.newPage();
-  const pageErrors: PageCapture['pageErrors'] = [];
-  const consoleMessages: BrowserMessage[] = [];
-  page.on('pageerror', (error) => {
-    const entry: PageCapture['pageErrors'][number] = { message: error.message, at: Date.now() };
-    if (error.stack !== undefined) entry.stack = error.stack;
-    pageErrors.push(entry);
-  });
-  page.on('console', (message) => {
-    const type = message.type();
-    if (type !== 'error' && type !== 'warning') return;
-    const location = message.location();
-    consoleMessages.push({
-      type,
-      text: message.text(),
-      url: location.url,
-      line: location.lineNumber,
-      column: location.columnNumber,
-    });
-  });
-
-  const runtime = emptyRuntime();
-  const capture: PageCapture = {
-    startedAt: started,
-    requestedUrl: url,
-    finalUrl: url,
-    outcome: 'navigation-failed',
-    runtime,
-    pageErrors,
-    consoleMessages,
-    timings: { navigation: 0, total: 0 },
-    network: [],
-  };
-  trackNetwork(page, capture.network);
-
+  const recorder = recordPage(page, url, started);
+  const { capture } = recorder;
   try {
     let response: Response | null;
     try {
@@ -442,39 +511,10 @@ export async function capturePage(
       capture.failure = error instanceof Error ? error.message : String(error);
       return capture;
     }
-    capture.timings.navigation = Date.now() - started;
-    // The request start in real time (a fixed browser clock also fakes performance.timeOrigin).
-    const requestStart = response?.request().timing().startTime;
-    capture.timeOrigin = requestStart !== undefined && requestStart > 0 ? requestStart : started;
-    const documentPromise = response ? readDocument(response, options.bodyTimeout) : undefined;
-    await hooks.beforeHydration?.(page);
-
-    capture.outcome = await waitForHydration(page, options, deadline);
-    if (capture.outcome === 'hydrated' || capture.outcome === 'client-only') {
-      capture.timings.hydration = Date.now() - started;
-    }
-    await drainInto(page, runtime);
-
-    if (capture.outcome === 'hydrated' || capture.outcome === 'hydration-stalled') {
-      await waitForQuiet(page, options.effectQuietMs, options.pollMs, deadline);
-      const seq = await snapshotNow(page, 'post-effect');
-      if (seq !== undefined) capture.postEffectSnapshot = seq;
-    }
-
-    const userReady = await waitForUserReady(page, options, deadline);
-    const quiet = await waitForQuiet(page, options.quietMs, options.pollMs, deadline);
-    if (!userReady || !quiet) capture.readyTimedOut = true;
-    const stable = await snapshotNow(page, 'stable');
-    if (stable !== undefined) capture.stableSnapshot = stable;
-    await drainInto(page, runtime);
-
-    capture.finalUrl = page.url();
-    if (documentPromise) capture.document = await documentPromise;
-    capture.timings.total = Date.now() - started;
-    await hooks.beforeClose?.(page, capture);
-    return capture;
+    return await completeCapture(page, capture, response, options, hooks);
   } finally {
     capture.timings.total = Date.now() - started;
+    recorder.dispose();
     await page.close().catch(() => {});
   }
 }

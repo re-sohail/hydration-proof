@@ -23,6 +23,8 @@ export interface NormalizeOptions {
   maskAttributes: readonly (string | RegExp)[];
   /** Attribute names (lower case) or patterns that are removed. */
   ignoreAttributes: readonly (string | RegExp)[];
+  /** Attributes removed only from elements with the given tag (framework wrappers). */
+  elementAttributes?: Readonly<Record<string, readonly (string | RegExp)[]>>;
 }
 
 export interface NormalizeResult {
@@ -93,6 +95,17 @@ export const genericMarkers: MarkerRule[] = [
   },
 ];
 
+/**
+ * Inline script contents are never compared: React does not run scripts it
+ * renders on the client, and frameworks render different code on each side
+ * (server source vs client bundle). Runs after all other rules, so rules that
+ * drop specific scripts still win.
+ */
+export const opaqueScripts: MarkerRule = {
+  id: 'script-content',
+  match: (node) => (isElement(node) && node.tag === 'script' ? 'opaque' : undefined),
+};
+
 function matches(name: string, patterns: readonly (string | RegExp)[]): boolean {
   for (const pattern of patterns) {
     if (typeof pattern === 'string' ? pattern === name : pattern.test(name)) return true;
@@ -101,7 +114,7 @@ function matches(name: string, patterns: readonly (string | RegExp)[]): boolean 
 }
 
 export const DEFAULT_NORMALIZE: NormalizeOptions = {
-  markers: [...reactMarkers, ...genericMarkers],
+  markers: [...reactMarkers, ...genericMarkers, opaqueScripts],
   dropInterElementWhitespace: false,
   mergeText: true,
   maskAttributes: ['nonce'],
@@ -158,11 +171,13 @@ function normalizeChildren(
 }
 
 function normalizeElement(el: SElement, options: NormalizeOptions, dropped: Map<number, string>, opaque: boolean): void {
-  if (options.ignoreAttributes.length > 0 || options.maskAttributes.length > 0) {
+  const scoped = options.elementAttributes?.[el.tag.toLowerCase()];
+  if (options.ignoreAttributes.length > 0 || options.maskAttributes.length > 0 || scoped) {
     const attrs: [string, string][] = [];
     for (const [name, value] of el.attrs) {
       const lower = name.toLowerCase();
       if (matches(lower, options.ignoreAttributes)) continue;
+      if (scoped && matches(lower, scoped)) continue;
       attrs.push([name, matches(lower, options.maskAttributes) ? '<masked>' : value]);
     }
     el.attrs = attrs;

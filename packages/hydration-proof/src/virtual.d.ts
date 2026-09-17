@@ -8,3 +8,8 @@ declare module 'virtual:hydration-proof/report-client' {
   const source: string;
   export default source;
 }
+
+declare module 'virtual:hydration-proof/overlay' {
+  const source: string;
+  export default source;
+}

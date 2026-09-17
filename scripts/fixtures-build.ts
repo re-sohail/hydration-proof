@@ -12,7 +12,8 @@ function newestMtime(dir: string): number {
   let newest = 0;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     // Build output, dependencies and tool output (.next, .hydration-proof) do not count.
-    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.')) continue;
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'build' || entry.name.startsWith('.')) continue;
+    if (entry.name.startsWith('hydration-proof.')) continue;
     const path = join(dir, entry.name);
     newest = Math.max(newest, entry.isDirectory() ? newestMtime(path) : statSync(path).mtimeMs);
   }
@@ -20,19 +21,29 @@ function newestMtime(dir: string): number {
 }
 
 const shared = newestMtime(join(fixturesDir, 'next-cases'));
-for (const app of ['next-app', 'next-pages']) {
+// App → file that exists after a build.
+const APPS: [app: string, output: string, dependsOnShared: boolean][] = [
+  ['next-app', '.next/BUILD_ID', true],
+  ['next-pages', '.next/BUILD_ID', true],
+  ['react-router', 'build/server/index.js', false],
+  ['remix', 'build/server/index.js', false],
+  ['vite-ssr', 'dist/server/entry-server.js', false],
+  ['astro-react', 'dist/server/entry.mjs', false],
+];
+for (const [app, output, dependsOnShared] of APPS) {
   const dir = join(fixturesDir, app);
-  const marker = join(dir, '.next', 'BUILD_ID');
-  const stale = force || !existsSync(marker) || Math.max(shared, newestMtime(dir)) > statSync(marker).mtimeMs;
+  const marker = join(dir, output);
+  const newest = Math.max(dependsOnShared ? shared : 0, newestMtime(dir));
+  const stale = force || !existsSync(marker) || newest > statSync(marker).mtimeMs;
   if (!stale) {
     console.log(`${app}: up to date`);
     continue;
   }
   console.log(`${app}: building…`);
-  execFileSync('pnpm', ['exec', 'next', 'build'], {
+  execFileSync('pnpm', ['run', 'build'], {
     cwd: dir,
     stdio: 'inherit',
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1' },
+    env: { ...process.env, NEXT_TELEMETRY_DISABLED: '1', ASTRO_TELEMETRY_DISABLED: '1' },
   });
 }
 

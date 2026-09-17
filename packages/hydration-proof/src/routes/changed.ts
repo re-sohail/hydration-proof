@@ -186,6 +186,9 @@ export function importGraph(rootDir: string, repository: string): Map<string, Se
 function routeRoots(route: DiscoveredRoute, rootDir: string): string[] {
   const page = resolve(rootDir, route.file);
   const roots = [page];
+  if (route.router === 'react-router' || route.router === 'astro') {
+    return [...roots, ...(route.wrappers ?? []).map((file) => resolve(rootDir, file))];
+  }
   if (route.router === 'pages') {
     const pagesDir = page.slice(0, page.lastIndexOf(`${sep}pages${sep}`) + `${sep}pages`.length);
     for (const name of readdirSafe(pagesDir)) if (PAGES_WRAPPERS.test(name)) roots.push(join(pagesDir, name));

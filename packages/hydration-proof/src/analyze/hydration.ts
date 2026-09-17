@@ -186,8 +186,20 @@ function classifyChange(
     excerpt: excerpt(change.kind === 'insert' ? undefined : (serverElement ?? change.before), change.kind === 'remove' ? undefined : (clientElement ?? change.after)),
     ...(component ? { component } : {}),
   };
-  const structural = change.kind === 'tag' || change.kind === 'insert' || change.kind === 'remove';
-  if (structural && (isSuppressed(post, change.afterElement) || (clientElement !== undefined && clientElement.client?.suppress === true))) {
+  // Scripts are not page content: React never runs scripts it renders on the
+  // client, and frameworks add or drop them when a document is re-rendered.
+  const node = change.kind === 'insert' ? change.after : change.kind === 'remove' ? change.before : undefined;
+  if (isElement(node) && node.tag === 'script') return undefined;
+  // suppressHydrationWarning covers an element's own content: a structural
+  // change counts when it happens inside a suppressed element (or replaces its tag).
+  const container = change.kind === 'insert' ? post.get(change.afterElement ?? -1)?.parent?.id : change.kind === 'remove' ? change.afterElement : change.afterElement;
+  const suppressedHere =
+    change.kind === 'tag'
+      ? isSuppressed(post, change.afterElement) || clientElement?.client?.suppress === true
+      : change.kind === 'insert' || change.kind === 'remove'
+        ? isSuppressed(post, container)
+        : false;
+  if (suppressedHere) {
     return placed(
       {
         ...base,

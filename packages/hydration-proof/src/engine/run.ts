@@ -12,6 +12,7 @@ import { mapConcurrent } from './pool.ts';
 import { nodeRects } from './runtime-loader.ts';
 import { applyThrottling, timeoutFactor, type Throttling } from './throttle.ts';
 import type { DiagnosisContext } from '../diagnose/index.ts';
+import type { CauseDetector } from '../plugins/index.ts';
 import type { SourceResolver } from '../source/resolve.ts';
 
 export interface PageJob {
@@ -52,6 +53,10 @@ export interface EngineOptions {
   screenshotMaxHeight: number;
   /** Elements blacked out in screenshots. */
   screenshotMask?: readonly string[];
+  /** Cause detectors from plugins. */
+  detectors?: readonly CauseDetector[];
+  /** Pages without React are expected (islands architectures). */
+  allowNoReact?: boolean;
 }
 
 export const DEFAULT_ENGINE: EngineOptions = {
@@ -128,6 +133,7 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
     propsAudit: options.propsAudit,
   };
   if (options.normalize) analyzeOptions.normalize = options.normalize;
+  if (options.allowNoReact) analyzeOptions.allowNoReact = true;
   if (job.expectedStatuses) analyzeOptions.expectedStatuses = job.expectedStatuses;
   if (job.expectRedirect !== undefined) analyzeOptions.expectRedirect = job.expectRedirect;
   const parseOptions = parseContextOptions(job.scenario.context);
@@ -156,6 +162,7 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
           rootDir: options.rootDir,
           sourceMaps: options.sourceMaps,
           diagnosis: { scenario: diagnosisScenario(job.scenario), server: options.serverEnvironment },
+          ...(options.detectors ? { detectors: options.detectors } : {}),
         });
 
         const failing = analysis.issues.some((issue) => !issue.ignored && issue.severity !== 'info');

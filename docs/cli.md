@@ -10,6 +10,8 @@ hydration-proof <command> [options]
 | `baseline` | Test the app and record the current findings in the baseline (same options as `test`) |
 | `merge-reports <report>...` | Combine the reports of parallel jobs into one |
 | `init` | Create `hydration-proof.config.ts` and ignore the report folder in git; `--ci github` or `--ci gitlab` also writes a CI workflow |
+| `dev` | Open the app in a browser with the hydration overlay ([development tools](dev.md)) |
+| `ui` | Start the local dashboard (`--open`, `--port`) |
 | `install [browser...]` | Download browsers for the Playwright version hydration-proof uses (`chromium` by default) |
 | `doctor` | Check Node.js, Playwright, browsers, the config file and framework detection |
 
@@ -40,6 +42,7 @@ Run `hydration-proof <command> --help` for the options of a command.
 | `--retries <n>` | Retries for pages that fail to load |
 | `--fail-on <level>` | `error` (default), `warning`, `info` or `never` |
 | `--headed` | Show the browser window |
+| `--watch` | Keep the app running and test the routes each file change affects |
 | `--sitemap` | Also test the routes listed in the sitemap (`robots.txt`, `/sitemap.xml`) |
 | `--crawl` | Also test same-origin links found on tested pages (depth 2, at most 50 routes; see `routes.crawl`) |
 | `--no-cache` | Discover routes again instead of using `.hydration-proof/cache` |
@@ -76,7 +79,7 @@ Each argument is a report folder or a `report.json` file. Screenshots are copied
 | 3 | The app could not be built, started or reached |
 | 4 | The browser is not installed or could not start |
 | 70 | Internal error (please report it) |
-| 130 | Interrupted |
+| 130 | Interrupted (`dev`, `ui` and `--watch` exit with 0 when stopped with Ctrl+C) |
 
 These values are stable.
 

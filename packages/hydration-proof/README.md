@@ -67,7 +67,7 @@ npx hydration-proof init   # creates hydration-proof.config.ts
 npx hydration-proof test
 ```
 
-For a Next.js app, that is all: routes are discovered from `app/`, `pages/` and the build output (dynamic pages the build pre-rendered, the not-found page), the app is built (if needed) and started on a free port, every route is tested, and the process exits with code 1 if something is wrong.
+For Next.js, React Router, Remix and Astro apps, that is all: routes are discovered from `app/`, `pages/` and the build output (dynamic pages the build pre-rendered, the not-found page), the app is built (if needed) and started on a free port, every route is tested, and the process exits with code 1 if something is wrong.
 
 More routes: `--sitemap` adds the pages in your sitemap, and `--crawl` follows the links on tested pages.
 
@@ -137,6 +137,18 @@ export default defineConfig({
 
 All options are described in [docs/configuration.md](https://github.com/re-sohail/hydration-proof/blob/main/docs/configuration.md). The config file is loaded with Node's built-in TypeScript support, so no extra tooling is needed.
 
+## While you develop
+
+```bash
+npx hydration-proof dev            # browse the app with a hydration overlay
+npx hydration-proof test --watch   # re-test the routes each change affects
+npx hydration-proof ui --open      # local dashboard: run tests, read reports
+```
+
+The overlay shows the findings of every page you open, highlights the element and opens the source line in your editor. Nothing is added to your app. See [development tools](https://github.com/re-sohail/hydration-proof/blob/main/docs/dev.md).
+
+Catch problems even earlier with the ESLint plugin [`eslint-plugin-hydration-proof`](https://github.com/re-sohail/hydration-proof/blob/main/docs/eslint.md): `Date.now()`, `Math.random()`, browser globals, storage and locale-dependent formatting in render code.
+
 ## In CI
 
 ```yaml
@@ -163,7 +175,7 @@ Comparing neighbouring stages tells *where* a difference started: in the markup,
 ## Requirements
 
 - Node.js 22.18 or newer
-- React 18 or 19 with server rendering (Next.js App Router and Pages Router are detected automatically; other servers work with `server.command` or `--url`)
+- React 18 or 19 with server rendering. Next.js (App Router and Pages Router), React Router, Remix, Astro and Vite SSR are detected automatically; any other server works with `server.command` or `--url`, and [adapters and plugins](https://github.com/re-sohail/hydration-proof/blob/main/docs/adapters.md) add more
 - A Playwright browser (`npx hydration-proof install`). Browsers live in Playwright's shared cache, so a project that already uses the same Playwright version does not download them again
 
 The only runtime dependency is `playwright-core`.

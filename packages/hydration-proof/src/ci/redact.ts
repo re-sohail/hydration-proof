@@ -18,9 +18,22 @@ interface Rule {
   accept?: (match: string) => boolean;
 }
 
+/** Card networks by prefix, with the lengths they issue (so timestamps and ids are not cards). */
+const CARD_NETWORKS: readonly [RegExp, readonly number[]][] = [
+  [/^4/, [13, 16, 19]], // Visa
+  [/^(?:5[1-5]|2(?:2[2-9]|[3-6]\d|7[01]|720))/, [16]], // Mastercard
+  [/^3[47]/, [15]], // American Express
+  [/^(?:6011|65|64[4-9])/, [16, 19]], // Discover
+  [/^35(?:2[89]|[3-8])/, [16, 19]], // JCB
+  [/^3(?:0[0-5]|[68])/, [14, 16, 19]], // Diners Club
+  [/^62/, [16, 17, 18, 19]], // UnionPay
+  [/^(?:5018|5020|5038|6304|6759|676[1-3])/, [12, 13, 14, 15, 16, 17, 18, 19]], // Maestro
+];
+
 function luhn(value: string): boolean {
   const digits = value.replace(/\D/g, '');
   if (digits.length < 13 || digits.length > 19 || /^(\d)\1+$/.test(digits)) return false;
+  if (!CARD_NETWORKS.some(([prefix, lengths]) => prefix.test(digits) && lengths.includes(digits.length))) return false;
   let sum = 0;
   for (let i = 0; i < digits.length; i++) {
     let digit = Number(digits[digits.length - 1 - i]);

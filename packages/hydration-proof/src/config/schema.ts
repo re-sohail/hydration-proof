@@ -164,7 +164,45 @@ export const configSchema: Schema = s.object(
   {
     $schema: s.string(),
     configVersion: s.literal(1),
-    adapter: s.enum(['auto', 'next', 'none'], 'Framework adapter.'),
+    adapter: s.union(
+      [
+        s.string({ description: 'auto, next, react-router, remix, astro, vite, node, none, or the name of a plugin adapter.' }),
+        s.object(
+          {
+            name: s.string(),
+            detect: s.fn(),
+            commands: s.fn(),
+            discoverRoutes: s.fn(),
+            markers: s.array(s.any()),
+            ignoreAttributes: s.array(s.union([s.string(), s.regexp()])),
+            elementAttributes: s.record(s.array(s.union([s.string(), s.regexp()]))),
+            devHost: s.string(),
+            navigation: s.object({ navigate: s.string(), prefetch: s.string() }, undefined, ['navigate']),
+            notFound: s.boolean(),
+            pagesWithoutReact: s.boolean(),
+            sourcePath: s.fn(),
+          },
+          'An adapter from defineAdapter().',
+          ['name', 'detect', 'commands', 'markers'],
+        ),
+      ],
+      'Framework adapter.',
+    ),
+    plugins: s.array(
+      s.object(
+        {
+          name: s.string(),
+          adapters: s.array(s.any()),
+          normalizers: s.array(s.object({ name: s.string(), match: s.fn() }, undefined, ['name', 'match'])),
+          ignoreAttributes: s.array(s.union([s.string(), s.regexp()])),
+          detectors: s.array(s.object({ name: s.string(), detect: s.fn() }, undefined, ['name', 'detect'])),
+          reporters: s.array(s.any()),
+          routes: s.array(s.object({ name: s.string(), routes: s.fn() }, undefined, ['name', 'routes'])),
+        },
+        'A plugin from definePlugin().',
+        ['name'],
+      ),
+    ),
     server: s.object({
       command: s.string({ description: 'Start command; {port} is replaced with the port.' }),
       build: s.union([s.string(), s.literal(false)]),

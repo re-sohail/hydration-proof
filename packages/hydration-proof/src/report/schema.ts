@@ -113,7 +113,7 @@ const page = s.object(
     counts,
     mode: s.enum(['production', 'development']),
     serverLogs: s.array(s.string()),
-    source: s.enum(['config', 'discovered', 'manifest', 'sitemap', 'crawl', 'not-found']),
+    source: s.enum(['config', 'discovered', 'manifest', 'sitemap', 'crawl', 'not-found', 'plugin']),
     baseScenario: s.string(),
     environment: s.record(s.string()),
     runs: s.number({ integer: true }),

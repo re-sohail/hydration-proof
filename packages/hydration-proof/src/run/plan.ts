@@ -11,7 +11,7 @@ import type { PackageManager } from '../util/package-manager.ts';
 
 export interface PlannedRoute extends RouteEntry {
   pattern: string;
-  source: 'config' | 'discovered' | 'manifest' | 'sitemap' | 'crawl' | 'not-found';
+  source: 'config' | 'discovered' | 'manifest' | 'sitemap' | 'crawl' | 'not-found' | 'plugin';
 }
 
 export interface RouteFlags {
@@ -156,7 +156,25 @@ export async function planServerRoutes(
       extra.push({ path, pattern: pathOf(path), source: 'sitemap' });
     }
   }
-  const notFound = config.routes.notFound ?? adapter.name === 'next';
+  for (const plugin of config.plugins) {
+    for (const provider of plugin.routes ?? []) {
+      let entries: (string | RouteEntry)[];
+      try {
+        entries = await provider.routes({ rootDir: config.rootDir, baseUrl });
+      } catch (error) {
+        notes.push(`The route provider "${provider.name}" failed: ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+      for (const entry of entries) {
+        const route = typeof entry === 'string' ? { path: entry } : entry;
+        const path = route.path.startsWith('/') ? route.path : `/${route.path}`;
+        if (known.has(path)) continue;
+        known.add(path);
+        extra.push({ ...route, path, pattern: route.pattern ?? pathOf(path), source: 'plugin' });
+      }
+    }
+  }
+  const notFound = config.routes.notFound ?? adapter.notFound ?? false;
   if (notFound && !known.has(NOT_FOUND_PATH)) {
     extra.push({ path: NOT_FOUND_PATH, pattern: '(not found)', expectStatus: [404], source: 'not-found' });
   }

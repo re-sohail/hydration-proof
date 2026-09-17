@@ -1,7 +1,9 @@
 // The configuration accepted by `hydration-proof.config.ts`.
 // Every option is optional; see `resolveConfig` for defaults.
 
+import type { Adapter } from '../adapters/types.ts';
 import type { Severity } from '../issues/registry.ts';
+import type { HydrationProofPlugin } from '../plugins/index.ts';
 
 export type BrowserName = 'chromium' | 'firefox' | 'webkit';
 export type BuildMode = 'production' | 'development';
@@ -378,8 +380,14 @@ export interface HydrationProofConfig {
   $schema?: string;
   /** Config format version. */
   configVersion?: 1;
-  /** Framework adapter. Default `"auto"`. */
-  adapter?: 'auto' | 'next' | 'none';
+  /**
+   * Framework adapter: `"auto"` (default, detected from package.json), `"next"`,
+   * `"react-router"`, `"remix"`, `"astro"`, `"vite"`, `"node"`, `"none"`, the
+   * name of a plugin adapter, or an adapter from `defineAdapter()`.
+   */
+  adapter?: 'auto' | 'next' | 'react-router' | 'remix' | 'astro' | 'vite' | 'node' | 'none' | (string & {}) | Adapter;
+  /** Plugins: adapters, normalizers, cause detectors, reporters and route providers. */
+  plugins?: HydrationProofPlugin[];
   server?: ServerConfig;
   routes?: RoutesConfig;
   /** Environments every route is tested in. Default: one scenario named `default` (en-US, UTC, light). */

@@ -117,6 +117,16 @@ describe('redaction', () => {
     expect(Object.fromEntries(redactor.counts)).toEqual({ email: 1, token: 2, jwt: 1, card: 1, custom: 1, 'url-parameter': 1 });
   });
 
+  it('does not mistake timestamps and ids for card numbers', () => {
+    const redactor = createRedactor({})!;
+    // Millisecond timestamps pass the Luhn check about one time in ten.
+    const values = ['1789667900435', '1789667889352', '1000000000009', '0000000000000', '9999999999999994', '12345678903555'];
+    for (const value of values) expect(redactor.text(`Rendered at ${value}`)).toBe(`Rendered at ${value}`);
+    for (const card of ['4111111111111111', '5500 0055 5555 5559', '3782-822463-10005', '6011000990139424']) {
+      expect(redactor.text(`pay ${card}`)).toBe('pay [card]');
+    }
+  });
+
   it('redacts a whole report without touching fingerprints, and can be turned off', () => {
     const redactor = createRedactor({})!;
     const found = issue({ server: 'Hi jane@example.com', client: 'Hi guest', evidence: [{ kind: 'note', message: 'user jane@example.com' }] });

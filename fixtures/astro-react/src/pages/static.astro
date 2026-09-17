@@ -1,0 +1,8 @@
+---
+import Layout from '../layouts/Layout.astro';
+import StaticText from '../components/StaticText.jsx';
+---
+
+<Layout title="Static">
+  <StaticText client:load id="static" text="This text is the same on the server and in the browser." />
+</Layout>

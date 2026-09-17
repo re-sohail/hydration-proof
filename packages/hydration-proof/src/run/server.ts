@@ -74,7 +74,7 @@ export async function prepareServer(
       name: production ? 'the app' : 'the development server',
       command: command.replaceAll('{port}', String(port)),
       cwd: server.cwd,
-      env: { PORT: String(port), ...server.env },
+      env: { PORT: String(port), ...commands.env, ...server.env },
       url: baseUrl,
       timeout: server.timeout,
       reuseExisting: server.reuseExisting && server.port !== undefined,

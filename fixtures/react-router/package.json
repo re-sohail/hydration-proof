@@ -1,0 +1,25 @@
+{
+  "name": "@fixtures/react-router",
+  "private": true,
+  "type": "module",
+  "description": "React Router 8 framework mode fixture (SSR, React 19).",
+  "scripts": {
+    "build": "react-router build",
+    "start": "react-router-serve ./build/server/index.js",
+    "dev": "react-router dev --port ${PORT:-5173}",
+    "hydration-proof": "hydration-proof test"
+  },
+  "dependencies": {
+    "@react-router/node": "^8.4.0",
+    "@react-router/serve": "^8.4.0",
+    "isbot": "^5.2.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "^8.4.0"
+  },
+  "devDependencies": {
+    "@react-router/dev": "^8.4.0",
+    "hydration-proof": "workspace:*",
+    "vite": "^8.3.0"
+  }
+}

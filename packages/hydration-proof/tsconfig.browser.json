@@ -9,5 +9,5 @@
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["src/runtime", "src/report/client", "src/shared"]
+  "include": ["src/runtime", "src/report/client", "src/overlay", "src/shared"]
 }

@@ -6,6 +6,7 @@ import { componentFrames } from '../errors/react.ts';
 import type { Issue } from '../report/model.ts';
 import type { ResolvedFrame, SourceResolver } from '../source/resolve.ts';
 import { isLibraryPath, SourceResolver as Resolver } from '../source/resolve.ts';
+import type { CauseDetector } from '../plugins/index.ts';
 import type { PageCapture } from './capture.ts';
 import { nodeSources, pageScripts } from './runtime-loader.ts';
 
@@ -16,6 +17,28 @@ export interface EnrichOptions {
   rootDir: string;
   sourceMaps: boolean;
   diagnosis: Omit<DiagnosisContext, 'source' | 'headers'>;
+  /** Cause detectors from plugins. */
+  detectors?: readonly CauseDetector[];
+}
+
+/** Let plugin detectors replace the likely cause when they are more confident. */
+export function runDetectors(issue: Issue, detectors: readonly CauseDetector[], context: DiagnosisContext): void {
+  for (const detector of detectors) {
+    let found;
+    try {
+      found = detector.detect(issue, {
+        scenario: context.scenario,
+        ...(context.source ? { source: { file: context.source.file, line: context.source.line, content: context.source.content } } : {}),
+      });
+    } catch (error) {
+      issue.evidence.push({ kind: 'note', message: `The cause detector "${detector.name}" failed: ${error instanceof Error ? error.message : String(error)}` });
+      continue;
+    }
+    if (!found || (issue.cause?.proven ?? false) || found.confidence <= (issue.cause?.confidence ?? 0)) continue;
+    issue.cause = { id: found.id, title: found.title, confidence: Math.max(0, Math.min(1, found.confidence)), ...(found.docsUrl ? { docsUrl: found.docsUrl } : {}) };
+    if (found.reason) issue.evidence.unshift({ kind: 'note', message: `Likely cause (${detector.name}): ${found.title}. ${found.reason}` });
+    if (found.fixes?.length) issue.suggestions = dedupeStrings([...found.fixes, ...issue.suggestions]);
+  }
 }
 
 const MINIFIED = /^[A-Za-z_$][\w$]?$/;
@@ -149,5 +172,6 @@ export async function enrichIssues(
     if (result.evidence.length > 0) issue.evidence = [...result.evidence, ...issue.evidence];
     if (result.suggestions.length > 0) issue.suggestions = dedupeStrings([...result.suggestions, ...issue.suggestions]);
     if (result.severity !== undefined && !issue.ignored) issue.severity = result.severity;
+    if (options.detectors?.length) runDetectors(issue, options.detectors, context);
   }
 }

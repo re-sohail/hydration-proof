@@ -2,7 +2,9 @@ import { availableParallelism } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import type { BrowserContextOptions } from 'playwright-core';
 import type { Severity } from '../issues/registry.ts';
+import type { Adapter } from '../adapters/types.ts';
 import { expandMatrix, networkLabel, type EnvironmentLabels } from '../matrix/expand.ts';
+import type { HydrationProofPlugin } from '../plugins/index.ts';
 import type {
   BrowserName,
   BudgetConfig,
@@ -64,6 +66,8 @@ export interface CliOverrides {
   changed?: string | true;
   /** Monorepo: only these projects (names or paths). */
   projects?: string[];
+  /** Routes with their patterns (used by watch mode); takes precedence over `routes`. */
+  routeEntries?: RouteEntry[];
 }
 
 export interface ResolvedProject {
@@ -121,7 +125,8 @@ export interface ResolvedProbes {
 export interface ResolvedConfig {
   rootDir: string;
   configFile: string | undefined;
-  adapter: 'auto' | 'next' | 'none';
+  adapter: string | Adapter;
+  plugins: HydrationProofPlugin[];
   server: {
     command?: string;
     build?: string | false;
@@ -289,6 +294,11 @@ export function resolveConfig(
     if (baseNames.has(scenario.name)) throw new ConfigError(`Scenario names must be unique; "${scenario.name}" is used twice.`);
     baseNames.add(scenario.name);
   }
+  const pluginNames = new Set<string>();
+  for (const plugin of config.plugins ?? []) {
+    if (pluginNames.has(plugin.name)) throw new ConfigError(`Plugin names must be unique; "${plugin.name}" is used twice.`);
+    pluginNames.add(plugin.name);
+  }
   for (const name of config.matrix?.scenarios ?? []) {
     if (!baseNames.has(name)) throw new ConfigError(`matrix.scenarios: unknown scenario "${name}".`);
   }
@@ -340,7 +350,11 @@ export function resolveConfig(
   }
 
   const url = overrides.url ?? config.server?.url;
-  const cliRoutes = overrides.routes?.length ? overrides.routes.map((path) => ({ path })) : undefined;
+  const cliRoutes = overrides.routeEntries?.length
+    ? overrides.routeEntries
+    : overrides.routes?.length
+      ? overrides.routes.map((path) => ({ path }))
+      : undefined;
 
   let grep: RegExp | undefined;
   if (overrides.grep !== undefined) {
@@ -355,6 +369,7 @@ export function resolveConfig(
     rootDir,
     configFile: options.configFile,
     adapter: config.adapter ?? 'auto',
+    plugins: config.plugins ?? [],
     server: {
       buildWhen: overrides.build === true ? 'always' : overrides.build === false ? 'never' : (config.server?.buildWhen ?? 'if-missing'),
       cwd: config.server?.cwd ? resolvePath(rootDir, config.server.cwd) : rootDir,

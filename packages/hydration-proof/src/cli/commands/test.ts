@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import type { CliOverrides } from '../../config/resolve.ts';
 import type { BrowserName, BuildMode, ReporterName } from '../../config/types.ts';
 import { ExitCode } from '../../ci/exit-codes.ts';
+import { watchTests } from '../../dev/watch.ts';
 import { run } from '../../run.ts';
 import { UsageError, type CommandContext } from '../context.ts';
 
@@ -39,6 +40,7 @@ Options:
       --crawl               Also test same-origin links found on pages
       --sitemap             Also test routes listed in /sitemap.xml
       --no-cache            Discover routes again instead of using the cache
+      --watch               Keep the app running and test the routes each change affects
       --headed              Show the browser
   -h, --help                Show this help
 `;
@@ -78,7 +80,7 @@ function extractChanged(args: string[]): { rest: string[]; changed?: string | tr
   return changed === undefined ? { rest } : { rest, changed };
 }
 
-export function parseTestArgs(argv: string[]): { overrides: CliOverrides; config?: string; help: boolean } {
+export function parseTestArgs(argv: string[]): { overrides: CliOverrides; config?: string; help: boolean; watch?: boolean } {
   const { rest: args, changed } = extractChanged(argv);
   const { values } = parseArgs({
     args,
@@ -114,6 +116,7 @@ export function parseTestArgs(argv: string[]): { overrides: CliOverrides; config
       project: { type: 'string', multiple: true },
       repeat: { type: 'string' },
       headed: { type: 'boolean' },
+      watch: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -175,8 +178,9 @@ export function parseTestArgs(argv: string[]): { overrides: CliOverrides; config
     overrides.repeat = repeat;
   }
 
-  const result: { overrides: CliOverrides; config?: string; help: boolean } = { overrides, help: values.help === true };
+  const result: { overrides: CliOverrides; config?: string; help: boolean; watch?: boolean } = { overrides, help: values.help === true };
   if (values.config !== undefined) result.config = values.config;
+  if (values.watch) result.watch = true;
   return result;
 }
 
@@ -185,6 +189,15 @@ export async function testCommand(args: string[], context: CommandContext): Prom
   if (parsed.help) {
     context.out(TEST_HELP);
     return ExitCode.Ok;
+  }
+  if (parsed.watch) {
+    return watchTests({
+      cwd: context.cwd,
+      ...(parsed.config !== undefined ? { config: parsed.config } : {}),
+      overrides: parsed.overrides,
+      write: context.out,
+      signal: context.signal,
+    });
   }
   const result = await run({
     cwd: context.cwd,

@@ -167,7 +167,7 @@ export interface PageResult {
   /** Error and warning lines the app server printed while this page loaded. */
   serverLogs?: string[];
   /** How the route was found. */
-  source?: 'config' | 'discovered' | 'manifest' | 'sitemap' | 'crawl' | 'not-found';
+  source?: 'config' | 'discovered' | 'manifest' | 'sitemap' | 'crawl' | 'not-found' | 'plugin';
   /** The configured scenario this environment was derived from (with a matrix). */
   baseScenario?: string;
   /** The environment the page was tested in: browser plus the matrix axis values. */

@@ -22,7 +22,18 @@ Options:
 
 const GITIGNORE_ENTRY = '.hydration-proof/report/';
 
-function configSource(options: { typescript: boolean; nextjs: boolean; dynamic: string[] }): string {
+const FRAMEWORKS: Record<string, { label: string; commands: string; routes?: string }> = {
+  next: { label: 'Next.js', commands: 'next build, next start', routes: 'app/ and pages/' },
+  'react-router': { label: 'React Router', commands: 'react-router build, react-router-serve', routes: 'react-router routes' },
+  remix: { label: 'Remix', commands: 'remix vite:build, remix-serve', routes: 'remix routes' },
+  astro: { label: 'Astro', commands: 'astro build, then the Node server or astro preview', routes: 'src/pages' },
+  vite: { label: 'Vite SSR', commands: 'the build and start scripts of package.json' },
+  node: { label: 'a custom React server', commands: 'the build and start scripts of package.json' },
+};
+
+function configSource(options: { typescript: boolean; framework: string; dynamic: string[] }): string {
+  const known = FRAMEWORKS[options.framework];
+  const discovers = known?.routes !== undefined;
   const dynamicLines =
     options.dynamic.length > 0
       ? options.dynamic.map((pattern) => `      // ${JSON.stringify(pattern)}: ['example-1', 'example-2'],`).join('\n')
@@ -31,12 +42,12 @@ function configSource(options: { typescript: boolean; nextjs: boolean; dynamic: 
     ? `import { defineConfig } from 'hydration-proof';\n\nexport default defineConfig({`
     : `// @ts-check\n/** @type {import('hydration-proof').HydrationProofConfig} */\nexport default {`;
   const footer = options.typescript ? '});' : '};';
-  const serverComment = options.nextjs
-    ? `  // hydration-proof builds and starts the app (next build, next start).\n  // To test an app that is already running instead:\n  // server: { url: 'http://localhost:3000' },\n`
-    : `  // How to start the app. {port} is replaced with a free port.\n  server: {\n    build: 'npm run build',\n    command: 'npm start -- --port {port}',\n    // or test an app that is already running:\n    // url: 'http://localhost:3000',\n  },\n`;
+  const serverComment = known
+    ? `  // hydration-proof builds and starts the app (${known.commands}).\n  // To test an app that is already running instead:\n  // server: { url: 'http://localhost:3000' },\n`
+    : `  // How to start the app. {port} is replaced with a free port (also in the PORT variable).\n  server: {\n    build: 'npm run build',\n    command: 'npm start -- --port {port}',\n    // or test an app that is already running:\n    // url: 'http://localhost:3000',\n  },\n`;
   return `${header}
 ${serverComment}
-  routes: {${options.nextjs ? '\n    // Static routes are discovered from app/ and pages/.' : "\n    paths: ['/'],"}
+  routes: {${discovers ? `\n    // Routes are discovered from ${known.routes}.` : "\n    paths: ['/'],"}
     // Example values for dynamic routes:
     dynamic: {
 ${dynamicLines}
@@ -89,7 +100,7 @@ export async function initCommand(args: string[], context: CommandContext): Prom
 
   const manager = detectPackageManager(cwd, context.env);
   const adapter = selectAdapter('auto', cwd);
-  const nextjs = adapter.name === 'next';
+  const framework = adapter.name;
   const routes = adapter.discoverRoutes?.({ rootDir: cwd, packageManager: manager }) ?? [];
   const dynamic = routes.filter((route) => route.dynamic).map((route) => route.pattern);
   if (existing && !values.force) {
@@ -97,7 +108,7 @@ export async function initCommand(args: string[], context: CommandContext): Prom
   } else {
     const typescript = existsSync(join(cwd, 'tsconfig.json'));
     const file = join(cwd, typescript ? 'hydration-proof.config.ts' : 'hydration-proof.config.mjs');
-    writeFileSync(file, configSource({ typescript, nextjs, dynamic }));
+    writeFileSync(file, configSource({ typescript, framework, dynamic }));
     context.out(`${c.green('Created')} ${relative(cwd, file)}\n`);
   }
 
@@ -126,7 +137,11 @@ export async function initCommand(args: string[], context: CommandContext): Prom
   context.out(
     [
       '',
-      nextjs ? `Detected Next.js: ${found} static route${found === 1 ? '' : 's'}, ${dynamic.length} dynamic.` : 'No framework detected: edit server and routes in the config.',
+      FRAMEWORKS[framework]?.routes !== undefined
+        ? `Detected ${FRAMEWORKS[framework]!.label}: ${found} static route${found === 1 ? '' : 's'}, ${dynamic.length} dynamic.`
+        : FRAMEWORKS[framework]
+          ? `Detected ${FRAMEWORKS[framework]!.label}: list the routes to test in the config.`
+          : 'No framework detected: edit server and routes in the config.',
       '',
       'Next steps:',
       existsSync(join(cwd, 'node_modules', 'hydration-proof')) ? '' : `  ${installDevCommand(manager, 'hydration-proof')}`,

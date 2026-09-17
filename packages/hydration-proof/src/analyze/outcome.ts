@@ -12,7 +12,7 @@ function normalizePath(url: string): string {
   }
 }
 
-export function analyzeOutcome(capture: PageCapture, expectedStatuses: readonly number[], expectRedirect?: string): Draft[] {
+export function analyzeOutcome(capture: PageCapture, expectedStatuses: readonly number[], expectRedirect?: string, allowNoReact = false): Draft[] {
   const drafts: Draft[] = [];
   const base = { stage: 'runtime' as const, evidence: [] };
   switch (capture.outcome) {
@@ -20,7 +20,7 @@ export function analyzeOutcome(capture: PageCapture, expectedStatuses: readonly 
       drafts.push({ ...base, code: 'HP9004', confidence: 1, message: capture.failure ?? 'Navigation failed.', key: 'navigation' });
       return drafts;
     case 'no-react':
-      drafts.push({ ...base, code: 'HP9002', confidence: 0.9, message: 'No React renderer was found on the page.', key: 'no-react' });
+      if (!allowNoReact) drafts.push({ ...base, code: 'HP9002', confidence: 0.9, message: 'No React renderer was found on the page.', key: 'no-react' });
       break;
     case 'no-root':
       drafts.push({ ...base, code: 'HP9008', confidence: 0.8, message: 'React loaded but never mounted a root.', key: 'no-root' });

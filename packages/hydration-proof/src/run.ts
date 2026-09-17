@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Browser } from 'playwright-core';
-import { selectAdapter } from './adapters/index.ts';
+import { selectAdapter, UnknownAdapterError, type Adapter } from './adapters/index.ts';
 import { applyIgnores, type ExpiredRule } from './analyze/ignore.ts';
 import { applyBaseline, BaselineError, buildBaseline, readBaseline, writeBaseline, type BaselineFile, type ExpiredEntry } from './ci/baseline.ts';
 import { ExitCode } from './ci/exit-codes.ts';
@@ -203,10 +203,16 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     });
   }
 
-  const adapter = selectAdapter(config.adapter, config.rootDir);
+  let adapter: Adapter;
+  try {
+    adapter = selectAdapter(config.adapter, config.rootDir, config.plugins.flatMap((plugin) => plugin.adapters ?? []));
+  } catch (error) {
+    if (error instanceof UnknownAdapterError) throw new RunError(error.message, ExitCode.Usage);
+    throw error;
+  }
   const packageManager = detectPackageManager(config.rootDir);
   const { reporters, unsupported } = createReporters(config.reporters);
-  reporters.push(...(options.reporters ?? []));
+  reporters.push(...config.plugins.flatMap((plugin) => plugin.reporters ?? []), ...(options.reporters ?? []));
   if (unsupported.length > 0) notes.push(`Reporter${unsupported.length === 1 ? '' : 's'} not available yet: ${unsupported.join(', ')}.`);
 
   let baseline: BaselineFile | undefined;
@@ -391,6 +397,8 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
           serverEnvironment: serverEnvironment(config),
           screenshots: config.screenshots,
           screenshotMask: config.redact === false ? [] : config.redact.selectors,
+          detectors: config.plugins.flatMap((plugin) => plugin.detectors ?? []),
+          allowNoReact: adapter.pagesWithoutReact ?? false,
         };
 
         const crawl = config.routes.crawl;

@@ -1,0 +1,10 @@
+---
+import Layout from '../layouts/Layout.astro';
+import StaticText from '../components/StaticText.jsx';
+import IslandRandom from '../components/IslandRandom.jsx';
+---
+
+<Layout title="Two islands">
+  <StaticText client:load id="island-static" text="The first island is static." />
+  <IslandRandom client:load />
+</Layout>
