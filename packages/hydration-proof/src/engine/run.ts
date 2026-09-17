@@ -1,4 +1,5 @@
-import type { Browser } from 'playwright-core';
+import type { Browser, BrowserContext } from 'playwright-core';
+import type { BrowserName } from '../config/types.ts';
 import type { RuntimeOptions } from '../shared/protocol.ts';
 import { analyzePage, type AnalyzeOptions, type PageAnalysis } from '../analyze/index.ts';
 import type { NormalizeOptions } from '../dom/normalize.ts';
@@ -9,6 +10,7 @@ import { enrichIssues } from './enrich.ts';
 import { parseDocument, screenshot, screenshotServerHtml, type ParsedDocument } from './parse-stage.ts';
 import { mapConcurrent } from './pool.ts';
 import { nodeRects } from './runtime-loader.ts';
+import { applyThrottling, timeoutFactor, type Throttling } from './throttle.ts';
 import type { DiagnosisContext } from '../diagnose/index.ts';
 import type { SourceResolver } from '../source/resolve.ts';
 
@@ -22,8 +24,13 @@ export interface PageJob {
   expectRedirect?: string;
 }
 
+/** Returns the browser for a job (launched on first use). */
+export type BrowserSource = (name: BrowserName | undefined) => Promise<Browser>;
+
 export interface EngineOptions {
   workers: number;
+  /** Skip enrichment (source locations, causes); used by probe runs. */
+  enrich?: boolean;
   ready: ReadyOptions;
   runtime: Partial<RuntimeOptions>;
   normalize?: NormalizeOptions;
@@ -89,8 +96,29 @@ function diagnosisScenario(scenario: ScenarioSpec): DiagnosisContext['scenario']
   return out;
 }
 
+async function warmUp(context: BrowserContext, url: string, timeout: number): Promise<void> {
+  const page = await context.newPage();
+  try {
+    await page.goto(url, { waitUntil: 'load', timeout }).catch(() => undefined);
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): Promise<Omit<PageRun, 'attempts'>> {
   const context = await createScenarioContext(browser, job.scenario, options.runtime);
+  const throttling: Throttling = {};
+  if (job.scenario.network) throttling.network = job.scenario.network;
+  if (job.scenario.cpu !== undefined) throttling.cpu = job.scenario.cpu;
+  const factor = timeoutFactor(throttling);
+  const ready = { ...options.ready, ...job.ready };
+  if (factor > 1) {
+    ready.timeout = Math.round(ready.timeout * factor);
+    ready.hydrationTimeout = Math.round(ready.hydrationTimeout * factor);
+    ready.bodyTimeout = Math.round(ready.bodyTimeout * factor);
+    ready.noReactGrace = Math.round(ready.noReactGrace * Math.min(factor, 3));
+  }
+  const browserName = browser.browserType().name();
   const analyzeOptions: AnalyzeOptions = {
     route: job.route,
     scenario: job.scenario.name,
@@ -109,7 +137,9 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
   let capture: PageCapture;
 
   try {
-    capture = await capturePage(context, job.url, { ...options.ready, ...job.ready }, {
+    if (job.scenario.cache === 'warm') await warmUp(context, job.url, ready.timeout);
+    capture = await capturePage(context, job.url, ready, {
+      prepare: (page) => applyThrottling(context, page, browserName, throttling),
       beforeClose: async (page, result) => {
         if (options.parseStage && result.document?.body !== undefined) {
           try {
@@ -119,6 +149,7 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
           }
         }
         analysis = analyzePage(result, parsed, analyzeOptions);
+        if (options.enrich === false) return;
         await enrichIssues(page, result, analysis, options.resolver, {
           rootDir: options.rootDir,
           sourceMaps: options.sourceMaps,
@@ -158,12 +189,14 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
 }
 
 export async function runJobs(
-  browser: Browser,
+  browsers: Browser | BrowserSource,
   jobs: readonly PageJob[],
   options: EngineOptions,
   onResult?: (run: PageRun) => void,
 ): Promise<PageRun[]> {
+  const source: BrowserSource = typeof browsers === 'function' ? browsers : async () => browsers;
   return mapConcurrent(jobs, options.workers, async (job) => {
+    const browser = await source(job.scenario.browser);
     let attempts = 0;
     let run: Omit<PageRun, 'attempts'>;
     do {

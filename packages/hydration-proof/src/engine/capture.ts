@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Response } from 'playwright-core';
+import type { BrowserContext, Page, Request, Response } from 'playwright-core';
 import type {
   CapturedError,
   CommitInfo,
@@ -89,6 +89,65 @@ export interface BrowserMessage {
   column?: number;
 }
 
+/** A script or framework data request made while the page loaded. */
+export interface NetworkEntry {
+  url: string;
+  /** `rsc`: a React Server Components payload request (client navigation, prefetch). */
+  type: 'script' | 'rsc';
+  /** Epoch milliseconds. */
+  start: number;
+  status?: number;
+  /** Milliseconds until the response ended. */
+  duration?: number;
+  failure?: string;
+  prefetch?: boolean;
+}
+
+const MAX_NETWORK_ENTRIES = 300;
+
+/** Requests the browser cancelled itself (superseded prefetches, closed pages). */
+export function isAborted(failure: string | undefined): boolean {
+  return failure !== undefined && /ERR_ABORTED|NS_BINDING_ABORTED|cancel+ed/i.test(failure);
+}
+
+export function networkType(request: Request): NetworkEntry['type'] | undefined {
+  if (request.resourceType() === 'script') return 'script';
+  const headers = request.headers();
+  if (headers['rsc'] === '1' || /[?&]_rsc=/.test(request.url())) return 'rsc';
+  return undefined;
+}
+
+/** Record script and RSC requests of a page into `into`. */
+export function trackNetwork(page: Page, into: NetworkEntry[]): void {
+  const entry = (request: Request, type: NetworkEntry['type']): NetworkEntry => {
+    const timing = request.timing();
+    const out: NetworkEntry = { url: request.url(), type, start: timing.startTime };
+    if (type === 'rsc' && request.headers()['next-router-prefetch'] !== undefined) out.prefetch = true;
+    return out;
+  };
+  page.on('requestfinished', (request) => {
+    const type = networkType(request);
+    if (!type || into.length >= MAX_NETWORK_ENTRIES) return;
+    const item = entry(request, type);
+    const timing = request.timing();
+    if (timing.responseEnd >= 0) item.duration = Math.round(timing.responseEnd);
+    into.push(item);
+    void request
+      .response()
+      .then((response) => {
+        if (response) item.status = response.status();
+      })
+      .catch(() => {});
+  });
+  page.on('requestfailed', (request) => {
+    const type = networkType(request);
+    if (!type || into.length >= MAX_NETWORK_ENTRIES) return;
+    const item = entry(request, type);
+    item.failure = request.failure()?.errorText ?? 'failed';
+    into.push(item);
+  });
+}
+
 export interface PageCapture {
   /** Epoch milliseconds when loading started. */
   startedAt: number;
@@ -100,13 +159,17 @@ export interface PageCapture {
   runtime: RuntimeData;
   postEffectSnapshot?: number;
   stableSnapshot?: number;
-  /** Uncaught errors reported by the browser (fallback evidence). */
-  pageErrors: { message: string; stack?: string }[];
+  /** Uncaught errors reported by the browser (fallback evidence). `at` is epoch ms. */
+  pageErrors: { message: string; stack?: string; at: number }[];
   /** console.error / console.warn seen by the browser (fallback evidence). */
   consoleMessages: BrowserMessage[];
   timings: { navigation: number; hydration?: number; total: number };
   /** Ready conditions that were not met before the timeout. */
   readyTimedOut?: boolean;
+  /** Scripts and RSC requests. */
+  network: NetworkEntry[];
+  /** Epoch ms when the document request started, to align network and runtime times. */
+  timeOrigin?: number;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -270,7 +333,7 @@ async function waitForHydration(page: Page, options: ReadyOptions, deadline: num
   return 'hydration-timeout';
 }
 
-async function waitForQuiet(page: Page, quietMs: number, pollMs: number, deadline: number): Promise<boolean> {
+export async function waitForQuiet(page: Page, quietMs: number, pollMs: number, deadline: number): Promise<boolean> {
   const poller = new Poller(page);
   await poller.poll();
   while (Date.now() < deadline) {
@@ -315,6 +378,10 @@ async function drainInto(page: Page, runtime: RuntimeData): Promise<void> {
 }
 
 export interface CaptureHooks {
+  /** Runs on the new page before it navigates (throttling, routes). */
+  prepare?(page: Page): Promise<void>;
+  /** Runs once the document response arrived, before waiting for hydration. */
+  beforeHydration?(page: Page): Promise<void>;
   /** Runs after the final snapshot, while the page is still open. */
   beforeClose?(page: Page, capture: PageCapture): Promise<void>;
 }
@@ -335,7 +402,7 @@ export async function capturePage(
   const pageErrors: PageCapture['pageErrors'] = [];
   const consoleMessages: BrowserMessage[] = [];
   page.on('pageerror', (error) => {
-    const entry: { message: string; stack?: string } = { message: error.message };
+    const entry: PageCapture['pageErrors'][number] = { message: error.message, at: Date.now() };
     if (error.stack !== undefined) entry.stack = error.stack;
     pageErrors.push(entry);
   });
@@ -362,18 +429,25 @@ export async function capturePage(
     pageErrors,
     consoleMessages,
     timings: { navigation: 0, total: 0 },
+    network: [],
   };
+  trackNetwork(page, capture.network);
 
   try {
     let response: Response | null;
     try {
+      await hooks.prepare?.(page);
       response = await page.goto(url, { waitUntil: 'commit', timeout: options.timeout });
     } catch (error) {
       capture.failure = error instanceof Error ? error.message : String(error);
       return capture;
     }
     capture.timings.navigation = Date.now() - started;
+    // The request start in real time (a fixed browser clock also fakes performance.timeOrigin).
+    const requestStart = response?.request().timing().startTime;
+    capture.timeOrigin = requestStart !== undefined && requestStart > 0 ? requestStart : started;
     const documentPromise = response ? readDocument(response, options.bodyTimeout) : undefined;
+    await hooks.beforeHydration?.(page);
 
     capture.outcome = await waitForHydration(page, options, deadline);
     if (capture.outcome === 'hydrated' || capture.outcome === 'client-only') {

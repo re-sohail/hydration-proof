@@ -42,6 +42,26 @@ Discovered routes are cached until the build or a route folder changes. Run with
 
 The issue's `sourceUnavailableReason` says why. Enable browser source maps (`productionBrowserSourceMaps: true` in Next.js) to get the component, or run with `--mode development` for the exact line. Elements rendered by Server Components have no client code to point at.
 
+## The matrix is too slow
+
+Every environment loads every route. Use the default `strategy: 'pairwise'`, lower `matrix.max`, limit the matrix to some scenarios with `matrix.scenarios`, or run quick local checks with `--no-matrix`. In CI, split the pages with `--shard`.
+
+## Slow network in Firefox or WebKit
+
+Only Chromium can throttle the network. In Firefox and WebKit, every request except the page itself is delayed by the latency instead, which turns the HTTP cache off. CPU slowdown is Chromium only.
+
+## A cause is "not proven"
+
+Probes prove a cause when a finding changes with exactly one factor. When the page renders differently on identical reloads, the value comes from the server or an API (for example a counter or the current time on the server), which the browser cannot control. Send the data the server rendered with to the client.
+
+## Navigation checks report differences
+
+Client navigation keeps state that a direct load does not have: module variables, context in layouts, parallel route slots. If the difference is intended (a modal from an intercepting route, a slot that keeps its page), add an ignore rule for the route with `code: 'HP5004'`. To start from another page, set `checks.navigation.from` or `navigateFrom` on the route.
+
+## Interaction checks find a lost click
+
+A server-rendered button is visible before React can handle its clicks. Show the control as disabled or loading until the page is interactive, or make it work without JavaScript. If that is acceptable for your app, ignore HP5001.
+
 ## Component names are single letters
 
 Production builds minify component names. Run with `--mode development` to see real component names.

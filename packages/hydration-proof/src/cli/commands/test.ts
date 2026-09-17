@@ -19,7 +19,12 @@ Options:
       --build / --no-build  Always rebuild / never build before testing
       --browser <name>      chromium (default), firefox or webkit
       --channel <name>      Use an installed browser, e.g. chrome
-      --reporter <list>     Comma-separated: list,json,html
+      --no-matrix           Test the scenarios without the environment matrix
+      --probe               Prove causes by reloading pages with one thing changed
+      --interactions        Type, click and scroll while pages load; check nothing is lost
+      --navigation          Compare client-side navigation with direct loads (Next.js)
+      --repeat <n>          Load every page n times and report flaky findings
+      --reporter <list>     Comma-separated: list,json,html,junit,sarif,github,gitlab
   -o, --output <dir>        Report directory (default: .hydration-proof/report)
   -w, --workers <n>         Pages tested in parallel
       --timeout <ms>        Per-page timeout
@@ -71,6 +76,11 @@ export function parseTestArgs(args: string[]): { overrides: CliOverrides; config
       crawl: { type: 'boolean' },
       sitemap: { type: 'boolean' },
       cache: { type: 'boolean' },
+      matrix: { type: 'boolean' },
+      probe: { type: 'boolean' },
+      interactions: { type: 'boolean' },
+      navigation: { type: 'boolean' },
+      repeat: { type: 'string' },
       headed: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -119,6 +129,15 @@ export function parseTestArgs(args: string[]): { overrides: CliOverrides; config
   if (values.crawl !== undefined) overrides.crawl = values.crawl;
   if (values.sitemap !== undefined) overrides.sitemap = values.sitemap;
   if (values.cache !== undefined) overrides.cache = values.cache;
+  if (values.matrix !== undefined) overrides.matrix = values.matrix;
+  if (values.probe !== undefined) overrides.probes = values.probe;
+  if (values.interactions !== undefined) overrides.interactions = values.interactions;
+  if (values.navigation !== undefined) overrides.navigation = values.navigation;
+  const repeat = positiveInt(values.repeat, '--repeat');
+  if (repeat !== undefined) {
+    if (repeat > 100) throw new UsageError('--repeat must be at most 100.');
+    overrides.repeat = repeat;
+  }
 
   const result: { overrides: CliOverrides; config?: string; help: boolean } = { overrides, help: values.help === true };
   if (values.config !== undefined) result.config = values.config;

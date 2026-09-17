@@ -122,6 +122,9 @@
         },
         "ignored": {
           "type": "integer"
+        },
+        "flaky": {
+          "type": "integer"
         }
       },
       "required": [
@@ -328,6 +331,23 @@
               "not-found"
             ]
           },
+          "baseScenario": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "runs": {
+            "type": "integer"
+          },
+          "flakiness": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
           "timeline": {
             "type": "array",
             "items": {
@@ -346,7 +366,10 @@
                     "mutation",
                     "stream",
                     "effects",
-                    "snapshot"
+                    "snapshot",
+                    "network",
+                    "navigation",
+                    "interaction"
                   ]
                 },
                 "label": {
@@ -470,12 +493,18 @@
               "HP3001",
               "HP3002",
               "HP3003",
+              "HP3004",
               "HP4001",
               "HP4002",
               "HP4003",
               "HP5001",
               "HP5002",
               "HP5003",
+              "HP5004",
+              "HP5005",
+              "HP5006",
+              "HP5007",
+              "HP5008",
               "HP6001",
               "HP6002",
               "HP6003",
@@ -619,6 +648,9 @@
               },
               "docsUrl": {
                 "type": "string"
+              },
+              "proven": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -706,6 +738,74 @@
               "production",
               "development"
             ]
+          },
+          "occurrences": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "seen": {
+                "type": "integer"
+              },
+              "runs": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "seen",
+              "runs"
+            ]
+          },
+          "flaky": {
+            "type": "boolean"
+          },
+          "onlyIn": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "axis": {
+                  "type": "string"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "axis",
+                "values"
+              ]
+            }
+          },
+          "probes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "factor": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string",
+                  "enum": [
+                    "changes",
+                    "stable",
+                    "inconclusive"
+                  ]
+                },
+                "detail": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "factor",
+                "result"
+              ]
+            }
           }
         },
         "required": [

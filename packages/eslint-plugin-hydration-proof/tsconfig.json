@@ -1,0 +1,12 @@
+{
+  // The plugin source. It runs inside ESLint in Node, but uses no Node APIs
+  // so it also works in browser-based ESLint playgrounds.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"]
+}

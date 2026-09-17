@@ -14,10 +14,17 @@ export interface PlannedRoute extends RouteEntry {
   source: 'config' | 'discovered' | 'manifest' | 'sitemap' | 'crawl' | 'not-found';
 }
 
+export interface RouteFlags {
+  parallel?: boolean;
+  intercepted?: boolean;
+}
+
 export interface RoutePlan {
   routes: PlannedRoute[];
   /** All known route patterns (static and dynamic), for mapping crawled URLs. */
   patterns: string[];
+  /** Framework details of route patterns (parallel and intercepting routes). */
+  flags: Record<string, RouteFlags>;
 }
 
 export const NOT_FOUND_PATH = '/hydration-proof-not-found';
@@ -30,7 +37,7 @@ interface DiscoveryCache {
 function discover(config: ResolvedConfig, adapter: Adapter, packageManager: PackageManager, notes: string[]): DiscoveryCache {
   if (!adapter.discoverRoutes) return { discovered: [], examples: [] };
   const manifestsFirst = adapter.name === 'next' ? readNextManifests(config.rootDir) : undefined;
-  const key = discoveryKey(config.rootDir, [adapter.name, manifestsFirst?.buildId ?? 'no-build']);
+  const key = discoveryKey(config.rootDir, ['v2', adapter.name, manifestsFirst?.buildId ?? 'no-build']);
   const file = join(config.rootDir, '.hydration-proof', 'cache', 'routes.json');
   if (config.cache) {
     const cached = readCache<DiscoveryCache>(file, key);
@@ -66,6 +73,7 @@ export function planStaticRoutes(
 ): RoutePlan {
   const planned = new Map<string, PlannedRoute>();
   const patterns = new Set<string>();
+  const flags: Record<string, RouteFlags> = {};
   const add = (route: RouteEntry, source: PlannedRoute['source'], pattern?: string): void => {
     const resolvedPattern = route.pattern ?? pattern ?? pathOf(route.path);
     patterns.add(resolvedPattern);
@@ -81,6 +89,9 @@ export function planStaticRoutes(
     const skipped: string[] = [];
     for (const route of discovered) {
       patterns.add(route.pattern);
+      if (route.parallel || route.intercepted) {
+        flags[route.pattern] = { ...(route.parallel ? { parallel: true } : {}), ...(route.intercepted ? { intercepted: true } : {}) };
+      }
       if (!route.dynamic) {
         add({ path: route.pattern, ...(route.expectStatus ? { expectStatus: route.expectStatus } : {}) }, 'discovered');
         continue;
@@ -116,7 +127,7 @@ export function planStaticRoutes(
   }
 
   if (planned.size === 0) add({ path: '/' }, 'config');
-  return { routes: applyFilters(config, [...planned.values()]), patterns: [...patterns] };
+  return { routes: applyFilters(config, [...planned.values()]), patterns: [...patterns], flags };
 }
 
 /** Routes that need the running app: sitemap and the not-found probe. */
@@ -145,7 +156,7 @@ export async function planServerRoutes(
   if (notFound && !known.has(NOT_FOUND_PATH)) {
     extra.push({ path: NOT_FOUND_PATH, pattern: '(not found)', expectStatus: [404], source: 'not-found' });
   }
-  return { routes: [...routes, ...applyFilters(config, extra)], patterns: plan.patterns };
+  return { routes: [...routes, ...applyFilters(config, extra)], patterns: plan.patterns, flags: plan.flags };
 }
 
 export function routeAllowed(config: ResolvedConfig, path: string): boolean {

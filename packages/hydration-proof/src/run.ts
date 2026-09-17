@@ -7,22 +7,25 @@ import { applyIgnores, type ExpiredRule } from './analyze/ignore.ts';
 import { ExitCode } from './ci/exit-codes.ts';
 import { ConfigError, loadConfig } from './config/load.ts';
 import { resolveConfig, type CliOverrides, type ResolvedConfig, type ResolvedScenario } from './config/resolve.ts';
-import type { BuildMode } from './config/types.ts';
+import type { BrowserName, BuildMode } from './config/types.ts';
 import { BrowserMissingError, launchBrowser } from './engine/browser.ts';
 import { DEFAULT_READY, type ReadyOptions } from './engine/capture.ts';
 import { createResolver } from './engine/enrich.ts';
 import { LoginError, performLogin, type StorageState } from './engine/login.ts';
 import { loadPlaywright } from './engine/playwright.ts';
-import { DEFAULT_ENGINE, runJobs, type EngineOptions, type PageJob, type PageRun } from './engine/run.ts';
+import { DEFAULT_ENGINE, runJobs, type BrowserSource, type EngineOptions, type PageJob, type PageRun } from './engine/run.ts';
 import type { RunningServer } from './engine/server.ts';
 import { REPORT_SCHEMA_VERSION, type Issue, type PageResult, type Report } from './report/model.ts';
 import { createReporters, type Reporter, type ReporterContext } from './report/reporters/index.ts';
+import { classifyEnvironments } from './matrix/classify.ts';
 import { linksFromSnapshot, patternFor } from './routes/crawl.ts';
 import { matchesAny, pathOf } from './routes/pattern.ts';
 import { RunError } from './run/errors.ts';
 import { planServerRoutes, planStaticRoutes, routeAllowed, type PlannedRoute, type RoutePlan } from './run/plan.ts';
+import { runLateChecks } from './run/checks.ts';
+import { isProbeCandidate, runProbes, type ProbeTarget } from './run/probes.ts';
+import { aggregateRuns } from './run/repeat.ts';
 import {
-  compareModes,
   filterChecks,
   normalizeOptions,
   policy,
@@ -82,6 +85,16 @@ function jobId(route: PlannedRoute, scenario: string, mode: BuildMode | undefine
   return `${route.path} [${scenario}]${mode ? ` (${mode})` : ''}`;
 }
 
+const REPEAT_SUFFIX = /#\d+$/;
+
+function withQuery(url: string, query: Record<string, string>): string {
+  const entries = Object.entries(query);
+  if (entries.length === 0) return url;
+  const parsed = new URL(url);
+  for (const [key, value] of entries) parsed.searchParams.set(key, value);
+  return parsed.href;
+}
+
 interface JobPlan {
   job: PageJob;
   route: PlannedRoute;
@@ -99,10 +112,10 @@ function buildJobs(
   const out: JobPlan[] = [];
   for (const route of routes) {
     for (const scenario of scenarios) {
-      if (route.scenarios && !route.scenarios.includes(scenario.name)) continue;
+      if (route.scenarios && !route.scenarios.includes(scenario.name) && !route.scenarios.includes(scenario.base)) continue;
       if (route.source !== 'not-found' && !scenarioAllows(scenario, route)) continue;
-      const url = new URL(route.path, `${baseUrl}/`).href;
-      const state = states.get(scenario.name);
+      const url = withQuery(new URL(route.path, `${baseUrl}/`).href, scenario.query);
+      const state = states.get(scenario.base);
       const job: PageJob = {
         id: jobId(route, scenario.name, mode),
         url,
@@ -114,6 +127,12 @@ function buildJobs(
           cookies: scenario.cookies,
           cookieUrl: baseUrl,
           mocks: scenario.mocks,
+          browser: scenario.browser,
+          cpu: scenario.cpu,
+          cache: scenario.cache,
+          ...(scenario.network ? { network: scenario.network } : {}),
+          ...(scenario.clock !== undefined ? { clock: scenario.clock } : {}),
+          ...(scenario.randomSeed !== undefined ? { randomSeed: scenario.randomSeed } : {}),
           ...(scenario.localStorage ? { localStorage: scenario.localStorage } : {}),
           ...(scenario.sessionStorage ? { sessionStorage: scenario.sessionStorage } : {}),
         },
@@ -178,33 +197,59 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     throw new RunError('--mode both starts the app twice, so it cannot be combined with --url / server.url.', ExitCode.Usage);
   }
   const scenarios = config.scenarios.filter(
-    (scenario) => config.scenarioFilter.length === 0 || config.scenarioFilter.includes(scenario.name),
+    (scenario) =>
+      config.scenarioFilter.length === 0 || config.scenarioFilter.includes(scenario.name) || config.scenarioFilter.includes(scenario.base),
   );
+  notes.push(...config.matrixNotes);
+  const bases = new Set(scenarios.map((scenario) => scenario.base));
+  if (scenarios.length > bases.size) {
+    notes.push(`Matrix: ${scenarios.length} environments for ${bases.size} scenario${bases.size === 1 ? '' : 's'}.`);
+  }
 
-  let browser: Browser | undefined;
+  const launched = new Map<BrowserName, Promise<Browser>>();
   let server: RunningServer | undefined;
+  const closeBrowsers = async (): Promise<void> => {
+    await Promise.all([...launched.values()].map((pending) => pending.then((browser) => browser.close()).catch(() => {})));
+  };
   const abort = (): void => {
-    void browser?.close().catch(() => {});
+    void closeBrowsers();
     void server?.stop();
   };
   options.signal?.addEventListener('abort', abort, { once: true });
 
-  try {
+  const launch = async (name: BrowserName): Promise<Browser> => {
     try {
-      browser = await launchBrowser(playwright, {
-        browser: config.browser.name,
+      return await launchBrowser(playwright, {
+        browser: name,
         headless: config.browser.headless,
-        ...(config.browser.channel !== undefined ? { channel: config.browser.channel } : {}),
+        // A channel (installed Chrome / Edge) only applies to Chromium.
+        ...(config.browser.channel !== undefined && name === 'chromium' ? { channel: config.browser.channel } : {}),
       });
     } catch (error) {
       if (error instanceof BrowserMissingError) {
         throw new RunError(
-          `${config.browser.name} is not installed for Playwright ${playwright.version}. Run: ${selfCommand(packageManager, `install ${config.browser.name}`)}`,
+          `${name} is not installed for Playwright ${playwright.version}. Run: ${selfCommand(packageManager, `install ${name}`)}`,
           ExitCode.Browser,
         );
       }
-      throw new RunError(`Could not launch ${config.browser.name}: ${error instanceof Error ? error.message : String(error)}`, ExitCode.Browser);
+      throw new RunError(`Could not launch ${name}: ${errorText(error)}`, ExitCode.Browser);
     }
+  };
+  const browsers: BrowserSource = (name) => {
+    const key = name ?? config.browser.name;
+    let pending = launched.get(key);
+    if (!pending) {
+      pending = launch(key);
+      launched.set(key, pending);
+    }
+    return pending;
+  };
+
+  try {
+    // Launch every needed browser up front, so a missing one fails fast.
+    const neededBrowsers = [...new Set([config.browser.name, ...scenarios.map((scenario) => scenario.browser)])];
+    await Promise.all(neededBrowsers.map((name) => browsers(name)));
+    const browser = await browsers(config.browser.name);
 
     if (config.screenshots !== 'off') rmSync(join(config.outputDir, 'screenshots'), { recursive: true, force: true });
     const resolver = createResolver(config.rootDir);
@@ -215,6 +260,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     const order = new Map<string, number>();
     let context: ReporterContext | undefined;
     let staticPlan: RoutePlan | undefined;
+    let printedNotes = 0;
 
     for (const mode of modes) {
       const modeTag = modes.length > 1 ? mode : undefined;
@@ -237,12 +283,15 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
         }
 
         const states = new Map<string, StorageState>();
+        const loggedIn = new Set<string>();
         for (const scenario of scenarios) {
-          if (!scenario.login) continue;
+          // One login per configured scenario, shared by its matrix environments.
+          if (!scenario.login || loggedIn.has(scenario.base)) continue;
+          loggedIn.add(scenario.base);
           try {
             states.set(
-              scenario.name,
-              await performLogin(browser, { name: scenario.name, context: scenario.context, mocks: scenario.mocks, cookies: scenario.cookies, cookieUrl: baseUrl }, scenario.login, baseUrl),
+              scenario.base,
+              await performLogin(browser, { name: scenario.base, context: scenario.context, mocks: scenario.mocks, cookies: scenario.cookies, cookieUrl: baseUrl }, scenario.login, baseUrl),
             );
           } catch (error) {
             throw new RunError(error instanceof LoginError ? error.message : String(error), ExitCode.Usage);
@@ -250,8 +299,12 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
         }
 
         const jobPlans = buildJobs(config, plan.routes, scenarios, baseUrl, states, modeTag).filter((entry) => inShard(entry, config.shard));
-        const routeOf = new Map(jobPlans.map((entry) => [entry.job.id, entry.route]));
+        const planOf = new Map(jobPlans.map((entry) => [entry.job.id, entry]));
         for (const entry of jobPlans) order.set(entry.job.id, order.size);
+        const repeated = (list: readonly JobPlan[]): PageJob[] =>
+          config.repeat === 1
+            ? list.map((entry) => entry.job)
+            : list.flatMap((entry) => Array.from({ length: config.repeat }, (_, index) => ({ ...entry.job, id: `${entry.job.id}#${index + 1}` })));
 
         if (!context) {
           const crawlNote = config.routes.crawl ? ' (plus crawled links)' : '';
@@ -259,7 +312,9 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
           for (const reporter of reporters) await reporter.onBegin?.(context);
           if (crawlNote) notes.push(`Crawling up to ${config.routes.crawl ? config.routes.crawl.limit : 0} more routes from the pages it tests.`);
           if (config.shard) notes.push(`Shard ${config.shard.index}/${config.shard.total}: ${jobPlans.length} of the pages.`);
+          if (config.repeat > 1) notes.push(`Loading every page ${config.repeat} times to find flaky findings.`);
           for (const note of notes) write(`  ${note}\n`);
+          printedNotes = notes.length;
         }
         const reporterContext = context;
 
@@ -293,21 +348,49 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
         let crawlBudget = crawl ? crawl.limit : 0;
         let collecting = crawl !== false;
         const pending: Promise<void>[] = [];
+        interface Buffered {
+          run: PageRun;
+          page: PageResult;
+          issues: Issue[];
+        }
+        const buffered = new Map<string, Buffered[]>();
+        const finish = (entries: Buffered[]): void => {
+          const aggregated = aggregateRuns(entries.map((entry) => ({ page: entry.page, issues: entry.issues })));
+          const page = aggregated.page;
+          const shot =
+            entries.find((entry) => entry.run.screenshots && entry.issues.some((issue) => !issue.ignored && issue.severity !== 'info')) ??
+            entries.find((entry) => entry.run.screenshots);
+          if (shot?.run.screenshots) page.screenshots = writeScreenshots(config.outputDir, shot.run, shot.run.screenshots);
+          pages.push(page);
+          allIssues.push(...aggregated.issues);
+          for (const reporter of reporters) pending.push(Promise.resolve(reporter.onPage?.(page, aggregated.issues, reporterContext)));
+        };
         const onResult = (pageRun: PageRun): void => {
+          const id = pageRun.job.id.replace(REPEAT_SUFFIX, '');
+          const planned = planOf.get(id);
           const issues = filterChecks(config, pageRun.analysis.issues);
           if (modeTag) for (const issue of issues) issue.mode = modeTag;
           expired.push(...applyIgnores(issues, { textPatterns: config.ignore.textPatterns, rules: config.ignore.issues }));
-          const page = toPageResult(pageRun, issues, routeOf.get(pageRun.job.id), modeTag);
-          if (pageRun.screenshots) page.screenshots = writeScreenshots(config.outputDir, pageRun, pageRun.screenshots);
+          const page = toPageResult(pageRun, issues, planned?.route, modeTag);
+          page.id = id;
+          if (planned) {
+            const { scenario } = planned;
+            if (scenario.base !== scenario.name) page.baseScenario = scenario.base;
+            page.environment = { browser: scenario.browser, ...scenario.environment };
+          }
           if (server) {
             const logs = serverLogsFor(pageRun, server.logs());
             if (logs.length > 0) page.serverLogs = logs;
           }
-          pages.push(page);
-          allIssues.push(...issues);
-          for (const reporter of reporters) pending.push(Promise.resolve(reporter.onPage?.(page, issues, reporterContext)));
+          const entries = buffered.get(id) ?? [];
+          entries.push({ run: pageRun, page, issues });
+          buffered.set(id, entries);
+          if (entries.length >= config.repeat) {
+            buffered.delete(id);
+            finish(entries);
+          }
 
-          if (collecting && crawlBudget > 0) {
+          if (collecting && crawlBudget > 0 && entries.length === 1) {
             const snapshot = pageRun.capture.runtime.snapshots.find((entry) => entry.seq === pageRun.capture.stableSnapshot);
             if (!snapshot) return;
             for (const path of linksFromSnapshot(snapshot.tree, pageRun.capture.finalUrl)) {
@@ -320,7 +403,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
           }
         };
 
-        await runJobs(browser, jobPlans.map((entry) => entry.job), engine, onResult);
+        await runJobs(browsers, repeated(jobPlans), engine, onResult);
 
         // Crawl: test newly found links, level by level.
         for (let depth = 1; crawl && depth <= crawl.depth && crawled.length > 0; depth++) {
@@ -329,11 +412,59 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
           const next = buildJobs(config, level, scenarios, baseUrl, states, modeTag).filter((entry) => inShard(entry, config.shard));
           for (const entry of next) {
             order.set(entry.job.id, order.size);
-            routeOf.set(entry.job.id, entry.route);
+            planOf.set(entry.job.id, entry);
           }
-          await runJobs(browser, next.map((entry) => entry.job), engine, onResult);
+          await runJobs(browsers, repeated(next), engine, onResult);
         }
         await Promise.all(pending);
+
+        // Probes: prove the causes of value mismatches on this server.
+        if (config.probes) {
+          const byPage = new Map<string, Issue[]>();
+          for (const page of pages) {
+            if (page.mode !== modeTag || !planOf.has(page.id)) continue;
+            const fingerprints = new Set(page.issues);
+            const issues = allIssues.filter(
+              (issue) =>
+                fingerprints.has(issue.fingerprint) &&
+                issue.route.url === page.url &&
+                issue.scenario === page.scenario &&
+                issue.mode === page.mode &&
+                isProbeCandidate(issue),
+            );
+            if (issues.length > 0) byPage.set(page.id, issues);
+          }
+          const targets: ProbeTarget[] = [...byPage.entries()]
+            .map(([id, issues]) => ({ job: planOf.get(id)?.job, issues }))
+            .filter((target): target is ProbeTarget => target.job !== undefined)
+            .sort((a, b) => b.issues.filter((issue) => issue.severity === 'error').length - a.issues.filter((issue) => issue.severity === 'error').length)
+            .slice(0, config.probes.maxPages);
+          if (byPage.size > targets.length && targets.length === config.probes.maxPages) {
+            notes.push(`Probed ${targets.length} of ${byPage.size} pages with value mismatches (probes.maxPages).`);
+          }
+          if (targets.length > 0) {
+            write(`  Probing ${targets.length} page${targets.length === 1 ? '' : 's'} to prove causes...\n`);
+            const loads = await runProbes(browsers, targets, engine, config.probes.factors, engine.serverEnvironment);
+            notes.push(`Probes: ${loads} extra page loads for ${targets.length} page${targets.length === 1 ? '' : 's'}.`);
+          }
+        }
+
+        // Interaction and navigation checks.
+        await runLateChecks({
+          config,
+          adapter,
+          browsers,
+          engine,
+          normalize: engine.normalize!,
+          baseUrl,
+          mode: modeTag,
+          plan,
+          pages: pages.filter((page) => page.mode === modeTag && planOf.has(page.id)).map((page) => ({ page, planned: planOf.get(page.id)! })),
+          allIssues,
+          expired,
+          notes,
+          write,
+        });
       } finally {
         for (const step of [teardown, config.hooks.teardown && (() => config.hooks.teardown?.(hookContext))]) {
           try {
@@ -348,7 +479,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
       }
     }
 
-    if (modes.length > 1) compareModes(allIssues);
+    classifyEnvironments(pages, allIssues);
     pages.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     const finishedAt = new Date();
     const report: Report = {
@@ -362,7 +493,12 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
         node: process.version,
         platform: `${process.platform}-${process.arch}`,
         playwright: playwright.version,
-        browsers: [`${config.browser.name}${config.browser.channel ? ` (${config.browser.channel})` : ''} ${browser.version()}`],
+        browsers: await Promise.all(
+          [...launched.entries()].map(async ([name, pending]) => {
+            const launchedBrowser = await pending;
+            return `${name}${name === 'chromium' && config.browser.channel ? ` (${config.browser.channel})` : ''} ${launchedBrowser.version()}`;
+          }),
+        ),
         mode: config.server.mode,
         baseUrl: baseUrls.join(', '),
         ...(process.env['GITHUB_ACTIONS'] ? { ci: 'github-actions' } : process.env['GITLAB_CI'] ? { ci: 'gitlab' } : process.env['CI'] ? { ci: 'ci' } : {}),
@@ -372,6 +508,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
       issues: allIssues,
     };
 
+    if (notes.length > printedNotes) write(`\n${notes.slice(printedNotes).map((note) => `  ${note}\n`).join('')}`);
     const failures = policy(config, report, expired);
     const exitCode = failures.length > 0 ? ExitCode.Failed : ExitCode.Ok;
     const files: string[] = [];
@@ -383,7 +520,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     return { report, exitCode, failures, files, notes };
   } finally {
     options.signal?.removeEventListener('abort', abort);
-    await browser?.close().catch(() => {});
+    await closeBrowsers();
     await server?.stop();
   }
 }

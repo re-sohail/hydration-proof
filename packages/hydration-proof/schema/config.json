@@ -156,6 +156,10 @@
                         "type": "string"
                       }
                     }
+                  },
+                  "navigateFrom": {
+                    "description": "Page the navigation check starts from.",
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -426,6 +430,85 @@
             "items": {
               "type": "string"
             }
+          },
+          "query": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "browser": {
+            "type": "string",
+            "enum": [
+              "chromium",
+              "firefox",
+              "webkit"
+            ]
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "fast",
+                  "fast-3g",
+                  "slow-3g"
+                ]
+              },
+              {
+                "description": "Custom network throttling.",
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "downloadKbps": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "uploadKbps": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "latencyMs": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "downloadKbps",
+                  "uploadKbps",
+                  "latencyMs"
+                ]
+              }
+            ]
+          },
+          "cpu": {
+            "description": "CPU slowdown factor (Chromium only).",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "cache": {
+            "type": "string",
+            "enum": [
+              "cold",
+              "warm"
+            ]
+          },
+          "clock": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "randomSeed": {
+            "type": "integer"
           }
         },
         "required": [
@@ -519,7 +602,72 @@
             "info",
             "strict"
           ]
+        },
+        "interactions": {
+          "description": "Type, click, focus and scroll while the page loads.",
+          "type": "boolean"
+        },
+        "navigation": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "description": "Page to navigate from.",
+                  "type": "string"
+                },
+                "prefetch": {
+                  "type": "boolean"
+                },
+                "maxRoutes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          ]
         }
+      }
+    },
+    "interactions": {
+      "type": "array",
+      "items": {
+        "description": "A custom interaction.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "description": "Route glob.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "when": {
+            "type": "string",
+            "enum": [
+              "before-hydration",
+              "after-hydration"
+            ]
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "steps": {
+            "description": "A function (JavaScript/TypeScript configs only)."
+          }
+        },
+        "required": [
+          "route",
+          "steps"
+        ]
       }
     },
     "ignore": {
@@ -628,6 +776,294 @@
     },
     "cache": {
       "type": "boolean"
+    },
+    "matrix": {
+      "description": "Test scenarios in combinations of environments.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "locale": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timezoneId": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "colorScheme": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "light",
+              "dark",
+              "no-preference"
+            ]
+          }
+        },
+        "reducedMotion": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "reduce",
+              "no-preference"
+            ]
+          }
+        },
+        "viewport": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "width",
+                  "height"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop"
+                ]
+              }
+            ]
+          }
+        },
+        "browser": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "chromium",
+              "firefox",
+              "webkit"
+            ]
+          }
+        },
+        "network": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "fast",
+                  "fast-3g",
+                  "slow-3g"
+                ]
+              },
+              {
+                "description": "Custom network throttling.",
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "downloadKbps": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "uploadKbps": {
+                    "type": "number",
+                    "minimum": 1
+                  },
+                  "latencyMs": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "downloadKbps",
+                  "uploadKbps",
+                  "latencyMs"
+                ]
+              }
+            ]
+          }
+        },
+        "cpu": {
+          "type": "array",
+          "items": {
+            "description": "CPU slowdown factor (Chromium only).",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "cache": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "cold",
+              "warm"
+            ]
+          }
+        },
+        "axes": {
+          "description": "Custom axes: axis name → value name → scenario settings.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "description": "Scenario settings for one value of a custom axis.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cookies": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "domain": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "httpOnly": {
+                        "type": "boolean"
+                      },
+                      "secure": {
+                        "type": "boolean"
+                      },
+                      "sameSite": {
+                        "type": "string",
+                        "enum": [
+                          "Strict",
+                          "Lax",
+                          "None"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "value"
+                    ]
+                  }
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "localStorage": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "sessionStorage": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "initScripts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "query": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "pairwise",
+            "full",
+            "sample"
+          ]
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "probes": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "factors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "time",
+                  "random",
+                  "locale",
+                  "timezone",
+                  "theme",
+                  "viewport",
+                  "storage"
+                ]
+              }
+            },
+            "maxPages": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        }
+      ]
+    },
+    "repeat": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
     },
     "ci": {
       "type": "object",

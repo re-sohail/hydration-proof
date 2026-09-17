@@ -11,7 +11,7 @@ import { createPages, type ReactLike } from './pages.ts';
 export interface HarnessDeps {
   React: ReactLike;
   ReactDOMServer: {
-    renderToString: (element: any) => string;
+    renderToString: (element: any, options?: { identifierPrefix?: string }) => string;
     renderToPipeableStream: (element: any, options: any) => { pipe: (destination: NodeJS.WritableStream) => void };
   };
   clientFile: string;
@@ -22,8 +22,8 @@ function shellStart(page: string, head: string, label: string): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>${page} (${label})</title>${head}</head><body><div id="root">`;
 }
 
-function shellEnd(page: string, bodyEnd = ''): string {
-  return `</div>${bodyEnd}<script>window.__PAGE__=${JSON.stringify(page)}</script><script src="/client.js" defer></script></body></html>`;
+function shellEnd(page: string, bodyEnd = '', second = ''): string {
+  return `</div>${second}${bodyEnd}<script>window.__PAGE__=${JSON.stringify(page)}</script><script src="/client.js" defer></script></body></html>`;
 }
 
 export async function startHarness(deps: HarnessDeps, port = 0): Promise<{ url: string; server: Server }> {
@@ -59,7 +59,10 @@ export async function startHarness(deps: HarnessDeps, port = 0): Promise<{ url: 
       return;
     }
     if (!page.stream) {
-      res.end(deps.ReactDOMServer.renderToString(h(page.App)) + shellEnd(name, page.bodyEnd));
+      const second = page.second
+        ? `<div id="root2">${deps.ReactDOMServer.renderToString(h(page.second), page.secondPrefix ? { identifierPrefix: page.secondPrefix } : {})}</div>`
+        : '';
+      res.end(deps.ReactDOMServer.renderToString(h(page.App)) + shellEnd(name, page.bodyEnd, second));
       return;
     }
     const forward = new Writable({

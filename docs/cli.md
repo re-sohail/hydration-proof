@@ -24,9 +24,14 @@ Run `hydration-proof <command> --help` for the options of a command.
 | `-s, --scenario <name>` | Only this scenario. Repeatable |
 | `--mode <mode>` | `production` (default), `development`, or `both` (tests both and marks issues found in only one) |
 | `--build`, `--no-build` | Always rebuild, or never build, before testing. By default the app is built only when no build output exists |
-| `--browser <name>` | `chromium` (default), `firefox` or `webkit` |
+| `--browser <name>` | `chromium` (default), `firefox` or `webkit` (scenarios from the matrix keep their browser) |
 | `--channel <name>` | Use an installed browser such as `chrome` or `msedge` |
-| `--reporter <list>` | Comma-separated reporters: `list`, `json`, `html` (default: all three) |
+| `--no-matrix` | Test the scenarios without the environment matrix |
+| `--probe` | Prove causes: reload pages with value mismatches with one thing changed (see `probes`) |
+| `--interactions` | Type, click, focus and scroll while pages load, and check nothing is lost |
+| `--navigation` | Compare client-side navigation to each route with loading it directly (Next.js) |
+| `--repeat <n>` | Load every page `n` times and mark findings that appear in only some runs as flaky |
+| `--reporter <list>` | Comma-separated reporters: `list`, `json`, `html`, `junit`, `sarif`, `github`, `gitlab` (default: `list,json,html`) |
 | `-o, --output <dir>` | Report directory. Default `.hydration-proof/report` |
 | `-w, --workers <n>` | Pages tested in parallel |
 | `--timeout <ms>` | Per-page timeout |

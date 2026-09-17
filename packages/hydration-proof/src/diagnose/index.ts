@@ -20,6 +20,7 @@ export type CauseId =
   | 'third-party-script'
   | 'cdn'
   | 'unstable-id'
+  | 'form-state'
   | 'suppressed';
 
 interface CauseInfo {
@@ -105,6 +106,12 @@ export const CAUSES: Record<CauseId, CauseInfo> = {
   'unstable-id': {
     title: 'Generated id differs',
     fixes: ['Use React\'s useId instead of counters or random ids, and use the same identifierPrefix on server and client.'],
+  },
+  'form-state': {
+    title: 'Server Action form state',
+    fixes: [
+      'The server rendered this form with the result of a submitted Server Action (useActionState with a permalink), but the client hydrated without that state. Let the framework pass the form state to hydrateRoot (Next.js does this), and render the form from the action state only.',
+    ],
   },
   suppressed: {
     title: 'Intentional difference (suppressHydrationWarning)',
@@ -308,7 +315,12 @@ function sourceCandidates(issue: Issue, context: DiagnosisContext): { candidates
   return { candidates, hits };
 }
 
+export const FORM_STATE_NOTE = 'The element is inside a form that the server rendered with Server Action state (<!--F!--> marker).';
+
 function stageCandidates(issue: Issue): Candidate[] {
+  if (issue.evidence.some((entry) => entry.message === FORM_STATE_NOTE)) {
+    return [{ id: 'form-state', score: 0.9, reason: 'The server rendered the form with the result of a Server Action.' }];
+  }
   switch (issue.code) {
     case 'HP3001':
     case 'HP3002':

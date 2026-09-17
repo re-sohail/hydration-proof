@@ -22,6 +22,10 @@ export interface PageDef {
   /** Mount with createRoot instead of hydrateRoot. */
   clientOnly?: boolean;
   App: (props: Record<string, never>) => any;
+  /** A second React root rendered into #root2. */
+  second?: (props: Record<string, never>) => any;
+  /** identifierPrefix of the second root (server and client). */
+  secondPrefix?: string;
 }
 
 const isServer = (): boolean => typeof window === 'undefined';
@@ -57,6 +61,32 @@ export function createPages(React: ReactLike): Record<string, PageDef> {
     return h('main', { className: 'layout' }, h('h1', null, 'Harness'), children);
   }
 
+  function Counter({ id }: { id: string }) {
+    const [count, setCount] = React.useState(0);
+    return h('button', { id, type: 'button', onClick: () => setCount(count + 1) }, `Clicked ${count} times`);
+  }
+
+  function Form() {
+    const [name, setName] = React.useState('');
+    const [agree, setAgree] = React.useState(false);
+    return h(
+      'p',
+      null,
+      h('input', { id: 'name', value: name, onChange: (event: any) => setName(event.target.value) }),
+      h('input', { id: 'agree', type: 'checkbox', checked: agree, onChange: (event: any) => setAgree(event.target.checked) }),
+    );
+  }
+
+  function ScrollTop() {
+    React.useEffect(() => window.scrollTo(0, 0), []);
+    return h('p', { id: 'top' }, 'Top');
+  }
+
+  function Field({ label }: { label: string }) {
+    const id = React.useId();
+    return h('p', null, h('label', { htmlFor: id }, label), h('input', { id, name: label }));
+  }
+
   function Loaded() {
     return h('p', { className: 'loaded' }, `Data: ${slow.read()}`);
   }
@@ -90,6 +120,63 @@ export function createPages(React: ReactLike): Record<string, PageDef> {
     'text-mismatch': {
       stream: false,
       App: () => h(Layout, null, h('p', { id: 'env' }, isServer() ? 'server' : 'client')),
+    },
+    // A script adds a click listener to a button React also handles.
+    'double-handler': {
+      stream: false,
+      App: () => h(Layout, null, h(Counter, { id: 'twice' })),
+      bodyEnd: `<script>document.getElementById('twice').addEventListener('click', function () { window.__clicks = (window.__clicks || 0) + 1; });</script>`,
+    },
+    // Controlled fields (reset by hydration), a counter and a long page.
+    interactions: {
+      stream: false,
+      App: () => h(Layout, null, h(Form), h(Counter, { id: 'counter' }), h('div', { style: { height: '3000px' } }, 'Long content')),
+    },
+    // An effect scrolls to the top on load.
+    'scroll-reset': {
+      stream: false,
+      App: () => h(Layout, null, h(ScrollTop), h('div', { style: { height: '3000px' } }, 'Long content')),
+    },
+    // Uncontrolled fields keep what was typed; no button.
+    'interactions-ok': {
+      stream: false,
+      App: () => h(Layout, null, h('p', null, h('input', { id: 'free', defaultValue: '' })), h('div', { style: { height: '3000px' } }, 'Long content')),
+    },
+    // Two roots using useId: without identifierPrefix their ids collide.
+    'two-roots': {
+      stream: false,
+      App: () => h(Field, { label: 'Email' }),
+      second: () => h(Field, { label: 'Newsletter email' }),
+    },
+    'two-roots-prefixed': {
+      stream: false,
+      App: () => h(Field, { label: 'Email' }),
+      second: () => h(Field, { label: 'Newsletter email' }),
+      secondPrefix: 'second-',
+    },
+    // A mismatch next to the field: React re-creates the whole root, so the
+    // field typed into before hydration is replaced.
+    'input-remount': {
+      stream: false,
+      App: () =>
+        h(
+          Layout,
+          null,
+          h('p', { id: 'env' }, isServer() ? 'server' : 'client'),
+          h('p', null, h('input', { id: 'remount', defaultValue: '' })),
+          h('div', { style: { height: '3000px' } }, 'Long content'),
+        ),
+    },
+    // Client values that depend on the clock and on random numbers (probes).
+    'probe-values': {
+      stream: false,
+      App: () =>
+        h(
+          Layout,
+          null,
+          h('p', { id: 'now' }, isServer() ? 'server time' : `time ${new Date(Date.now()).toISOString()}`),
+          h('p', { id: 'random' }, isServer() ? 'server random' : `random ${Math.random().toFixed(6)} ${globalThis.crypto.getRandomValues(new Uint8Array(2)).join('.')}`),
+        ),
     },
     'attr-mismatch': {
       stream: false,

@@ -18,6 +18,14 @@ export interface AdapterCommands {
   buildOutput?: string;
 }
 
+/** Client-side navigation inside the app (page function sources taking the URL). */
+export interface AdapterNavigation {
+  /** Starts a client-side navigation; returns false when the router is not available. */
+  navigate: string;
+  /** Prefetches a route; returns false when not supported. */
+  prefetch?: string;
+}
+
 /** Framework integration. Internal in 0.1; public from 0.8. */
 export interface Adapter {
   name: string;
@@ -28,4 +36,5 @@ export interface Adapter {
   markers: MarkerRule[];
   /** Host to use for the dev server (Next.js blocks other origins). */
   devHost?: string;
+  navigation?: AdapterNavigation;
 }

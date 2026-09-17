@@ -32,12 +32,18 @@ them in ignore rules and baselines.
 | [HP3001](#hp3001) | error | Invalid HTML nesting |
 | [HP3002](#hp3002) | error | Interactive element nested in another |
 | [HP3003](#hp3003) | info | Duplicate id attribute |
+| [HP3004](#hp3004) | warning | Two React roots generate the same ids |
 | [HP4001](#hp4001) | error | The page was modified before React hydrated |
 | [HP4002](#hp4002) | info | A browser extension changed the page |
 | [HP4003](#hp4003) | error | HTML was rewritten between the server and the browser |
-| [HP5001](#hp5001) | error | An interaction before hydration was lost |
+| [HP5001](#hp5001) | warning | An interaction before hydration was lost |
 | [HP5002](#hp5002) | error | User input was reset during hydration |
 | [HP5003](#hp5003) | warning | Focus was lost during hydration |
+| [HP5004](#hp5004) | warning | The page differs after client-side navigation |
+| [HP5005](#hp5005) | error | Client-side navigation failed |
+| [HP5006](#hp5006) | warning | An element handles the same event twice |
+| [HP5007](#hp5007) | warning | Scroll position was reset during hydration |
+| [HP5008](#hp5008) | error | A custom interaction failed |
 | [HP6001](#hp6001) | info | Mismatch hidden by suppressHydrationWarning |
 | [HP6002](#hp6002) | error | suppressHydrationWarning cannot hide a structural difference |
 | [HP6003](#hp6003) | info | suppressHydrationWarning with nothing to suppress |
@@ -220,6 +226,11 @@ Online: https://hydration.jscrate.dev/docs/issues/hp1013
 
 Metadata, stylesheets or scripts in <head> changed during hydration.
 
+How to fix:
+
+- Render the same <title> and <meta> tags on the server and the client, so search engines, link previews and the first paint show the final values.
+- Compute head values from data the server has (route params, cookies) instead of browser-only values.
+
 Online: https://hydration.jscrate.dev/docs/issues/hp1014
 
 ### HP1015
@@ -346,7 +357,24 @@ Online: https://hydration.jscrate.dev/docs/issues/hp3002
 
 Several elements share the same id.
 
+How to fix:
+
+- Give every element a unique id; generate ids for repeated components with useId.
+
 Online: https://hydration.jscrate.dev/docs/issues/hp3003
+
+### HP3004
+
+**Two React roots generate the same ids** · `duplicate-use-id` · default severity: warning
+
+Several React roots on the page use useId without an identifierPrefix, so they generate the same ids and labels or ARIA references can point at the wrong element.
+
+How to fix:
+
+- Give every React root on the page its own identifierPrefix (hydrateRoot(container, element, { identifierPrefix: "app-" })).
+- Or render the parts in one root (for example with portals), so useId generates unique ids.
+
+Online: https://hydration.jscrate.dev/docs/issues/hp3004
 
 ## Changes made outside React
 
@@ -391,9 +419,14 @@ Online: https://hydration.jscrate.dev/docs/issues/hp4003
 
 ### HP5001
 
-**An interaction before hydration was lost** · `lost-interaction` · default severity: error
+**An interaction before hydration was lost** · `lost-interaction` · default severity: warning
 
-A click or input made before hydration finished had no effect.
+A click made while the page was loading had no effect: the page looked ready before React could handle events.
+
+How to fix:
+
+- Keep controls disabled (or show them as loading) until the page is interactive, or make them work without JavaScript (links, forms with Server Actions).
+- Ship less JavaScript for the first view and hydrate important controls first (Suspense boundaries hydrate in order of interaction).
 
 Online: https://hydration.jscrate.dev/docs/issues/hp5001
 
@@ -401,7 +434,12 @@ Online: https://hydration.jscrate.dev/docs/issues/hp5001
 
 **User input was reset during hydration** · `input-reset` · default severity: error
 
-Text typed before hydration finished was cleared or replaced.
+Text typed or an option chosen before hydration finished was cleared or replaced.
+
+How to fix:
+
+- Use uncontrolled inputs (defaultValue/defaultChecked) or read the current DOM value when the component mounts, so text typed before hydration is kept.
+- Fix any hydration mismatch around the form: a re-rendered branch creates new, empty inputs.
 
 Online: https://hydration.jscrate.dev/docs/issues/hp5002
 
@@ -409,9 +447,75 @@ Online: https://hydration.jscrate.dev/docs/issues/hp5002
 
 **Focus was lost during hydration** · `focus-lost` · default severity: warning
 
-The focused element was replaced during hydration.
+The focused element or the text selection was lost during hydration.
+
+How to fix:
+
+- Avoid re-creating the focused element during hydration (fix mismatches around it), and do not move focus in effects that run on load.
 
 Online: https://hydration.jscrate.dev/docs/issues/hp5003
+
+### HP5004
+
+**The page differs after client-side navigation** · `navigation-mismatch` · default severity: warning
+
+Navigating to the route inside the app renders different content than loading the URL directly.
+
+How to fix:
+
+- Render the same content for a route whether it is loaded directly or reached through client-side navigation: read data from the route (params, search params, server data), not from the previous page or client state.
+- Check layouts that keep state between navigations and components that depend on the previous route.
+
+Online: https://hydration.jscrate.dev/docs/issues/hp5004
+
+### HP5005
+
+**Client-side navigation failed** · `navigation-error` · default severity: error
+
+Navigating to the route inside the app threw an error, its data request failed, or the URL never changed.
+
+How to fix:
+
+- Open the route through a link in the browser and check the console and the network tab for the failed request.
+- Make sure server components of the route do not throw for requests that come from client-side navigation (RSC requests).
+
+Online: https://hydration.jscrate.dev/docs/issues/hp5005
+
+### HP5006
+
+**An element handles the same event twice** · `double-handler` · default severity: warning
+
+A script or an inline handler attribute handles an event on an element that React also handles, so one action can run twice.
+
+How to fix:
+
+- Handle the event in one place: remove the inline on* attribute or the script that adds the listener, or remove the React handler.
+
+Online: https://hydration.jscrate.dev/docs/issues/hp5006
+
+### HP5007
+
+**Scroll position was reset during hydration** · `scroll-reset` · default severity: warning
+
+The page scrolled on its own while it hydrated, so the user lost their place.
+
+How to fix:
+
+- Do not change the scroll position during hydration (scrollTo in effects, focus() on load); let the browser restore it.
+
+Online: https://hydration.jscrate.dev/docs/issues/hp5007
+
+### HP5008
+
+**A custom interaction failed** · `interaction-failed` · default severity: error
+
+An interaction from the config threw an error or caused a page error.
+
+How to fix:
+
+- Run the interaction in a headed browser (--headed) to see where it fails.
+
+Online: https://hydration.jscrate.dev/docs/issues/hp5008
 
 ## suppressHydrationWarning audit
 

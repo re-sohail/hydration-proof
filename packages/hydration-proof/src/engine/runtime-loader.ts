@@ -94,6 +94,22 @@ export async function pageScripts(page: Page): Promise<string[]> {
   });
 }
 
+type RuntimeMethod = 'interactionTargets' | 'prepareInput' | 'inputState' | 'observe';
+
+/** Call a helper of the page's runtime. */
+export async function callRuntime<T>(page: Page, method: RuntimeMethod, argument?: unknown): Promise<T> {
+  const result = await page.evaluate(
+    ([key, name, arg]) => {
+      const api = (globalThis as unknown as Record<string, Record<string, (value: unknown) => unknown> | undefined>)[key];
+      if (!api || typeof api[name] !== 'function') return { missing: true };
+      return { value: api[name]!(arg) };
+    },
+    [RUNTIME_GLOBAL, method, argument ?? null] as const,
+  );
+  if ('missing' in result) throw new RuntimeUnavailableError('The hydration-proof runtime is not installed in this page.');
+  return result.value as T;
+}
+
 export async function nodeRects(page: Page, ids: number[]): Promise<NodeRect[]> {
   if (ids.length === 0) return [];
   return page.evaluate(

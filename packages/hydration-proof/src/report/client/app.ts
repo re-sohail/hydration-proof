@@ -2,6 +2,7 @@
 // JSON embedded in the page. Text is always inserted with textContent.
 
 import { myers } from '../../dom/myers.ts';
+import { describeSplit } from '../../matrix/classify.ts';
 import type { Issue, PageResult, Report, TimelineEntry } from '../model.ts';
 import { css } from './styles.ts';
 
@@ -185,7 +186,15 @@ function issueView(issue: Issue, open: boolean): HTMLElement {
     {},
     h('span', { className: `badge ${issue.severity}` }, issue.code),
     h('span', { className: 'issue-title' }, issue.title),
-    issue.cause ? h('span', { className: 'cause', title: 'Likely cause' }, `${issue.cause.title} · ${Math.round(issue.cause.confidence * 100)}%`) : null,
+    issue.cause
+      ? h(
+          'span',
+          { className: `cause${issue.cause.proven ? ' proven' : ''}`, title: issue.cause.proven ? 'Cause proven by a probe' : 'Likely cause' },
+          `${issue.cause.title} · ${issue.cause.proven ? 'proven' : `${Math.round(issue.cause.confidence * 100)}%`}`,
+        )
+      : null,
+    issue.flaky && issue.occurrences ? h('span', { className: 'cause flaky', title: 'Seen in some runs only' }, `flaky ${issue.occurrences.seen}/${issue.occurrences.runs}`) : null,
+    issue.onlyIn?.length ? h('span', { className: 'cause', title: describeSplit(issue.onlyIn) }, `only ${issue.onlyIn.map((split) => split.values.join('/')).join(' · ')}`) : null,
     issue.ignored ? h('span', { className: 'cause' }, 'ignored') : null,
     h(
       'span',
@@ -219,12 +228,38 @@ function issueView(issue: Issue, open: boolean): HTMLElement {
   else if (issue.sourceUnavailableReason) fact('Source', h('span', { className: 'small' }, issue.sourceUnavailableReason));
   fact('Stage', issue.stage);
   fact('Confidence', `${Math.round(issue.confidence * 100)}%`);
+  if (issue.onlyIn?.length) fact('Environments', describeSplit(issue.onlyIn));
+  if (issue.occurrences) fact('Runs', `Seen in ${issue.occurrences.seen} of ${issue.occurrences.runs}`);
   fact('Fingerprint', h('code', {}, issue.fingerprint), ' ', copyButton(issue.fingerprint));
   body.append(facts);
 
   if (issue.source?.frame) body.append(h('pre', { className: 'frame' }, issue.source.frame));
   if (issue.componentStack) {
     body.append(h('details', {}, h('summary', { className: 'small' }, 'Component stack'), h('pre', { className: 'frame' }, issue.componentStack)));
+  }
+  if (issue.probes?.length) {
+    const verdict: Record<string, string> = { changes: 'changes it', stable: 'no effect', inconclusive: 'inconclusive' };
+    body.append(
+      h('div', { className: 'section-title' }, 'Probes'),
+      h(
+        'table',
+        { className: 'probes' },
+        h('thead', {}, h('tr', {}, h('th', {}, 'Changed'), h('th', {}, 'Result'), h('th', {}, 'Details'))),
+        h(
+          'tbody',
+          {},
+          issue.probes.map((probe) =>
+            h(
+              'tr',
+              { className: probe.result },
+              h('td', {}, probe.factor === 'repeat' ? 'nothing (reload)' : probe.factor),
+              h('td', {}, verdict[probe.result] ?? probe.result),
+              h('td', { className: 'small' }, probe.detail ?? ''),
+            ),
+          ),
+        ),
+      ),
+    );
   }
   if (issue.suggestions.length > 0) {
     body.append(h('div', { className: 'section-title' }, 'How to fix'), h('ul', { className: 'plain' }, issue.suggestions.map((line) => h('li', {}, line))));
@@ -332,14 +367,59 @@ function timeline(entries: TimelineEntry[] | undefined): HTMLElement | null {
   );
 }
 
+/** The same route in the other environments it was tested in (matrix, build modes). */
+function environmentsOf(page: PageResult): HTMLElement | null {
+  const path = pathOf(page.url);
+  const base = page.baseScenario ?? page.scenario;
+  const siblings = report.pages.filter((other) => pathOf(other.url) === path && (other.baseScenario ?? other.scenario) === base);
+  if (siblings.length < 2) return null;
+  const axes = [...new Set(siblings.flatMap((other) => Object.keys(other.environment ?? {})))].filter(
+    (axis) => new Set(siblings.map((other) => other.environment?.[axis])).size > 1,
+  );
+  const withMode = siblings.some((other) => other.mode);
+  const rows = siblings.map((other) => {
+    const cells = axes.map((axis) => h('td', {}, other.environment?.[axis] ?? ''));
+    if (withMode) cells.push(h('td', {}, other.mode ?? ''));
+    const link = h('button', { className: 'link', type: 'button' }, other.status);
+    link.addEventListener('click', () => {
+      state.pageId = other.id;
+      state.issue = undefined;
+      state.statuses.add(other.status);
+      writeHash();
+      render();
+    });
+    return h(
+      'tr',
+      { className: other.id === page.id ? 'current' : '' },
+      h('td', {}, h('span', { className: `dot ${other.status}` }), ' ', link),
+      ...cells,
+      h('td', {}, String(other.counts.error + other.counts.warning)),
+    );
+  });
+  return h(
+    'details',
+    { open: true },
+    h('summary', { className: 'section-title' }, `Environments (${siblings.length})`),
+    h(
+      'table',
+      { className: 'probes' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Status'), axes.map((axis) => h('th', {}, axis)), withMode ? h('th', {}, 'mode') : null, h('th', {}, 'Issues'))),
+      h('tbody', {}, rows),
+    ),
+  );
+}
+
 function pageDetail(page: PageResult | undefined): HTMLElement {
   if (!page) return h('div', { className: 'empty' }, report.pages.length === 0 ? 'No pages were tested.' : 'Select a page.');
   const issues = issuesOf(page).filter(issueVisible);
   const hiddenCount = issuesOf(page).length - issues.length;
   const react = page.react ? `React ${page.react.version} (${page.react.build})` : 'No React';
+  const environment = Object.entries(page.environment ?? {}).map(([axis, value]) => `${axis}: ${value}`);
   const facts = [
-    `Scenario: ${page.scenario}`,
+    `Scenario: ${page.baseScenario ?? page.scenario}`,
+    ...environment,
     page.mode ? `Mode: ${page.mode}` : '',
+    page.runs ? `${page.runs} runs, flakiness ${Math.round((page.flakiness ?? 0) * 100)}%` : '',
     page.http ? `HTTP ${page.http.status}` : '',
     react,
     `Outcome: ${page.outcome}`,
@@ -359,6 +439,8 @@ function pageDetail(page: PageResult | undefined): HTMLElement {
   detail.append(h('div', { className: 'section-title' }, `Issues (${issues.length}${hiddenCount ? `, ${hiddenCount} hidden by filters` : ''})`));
   if (issues.length === 0) detail.append(h('p', { className: 'empty' }, 'No issues match the filters.'));
   issues.forEach((issue, index) => detail.append(issueView(issue, state.issue ? state.issue === issue.fingerprint : index === 0)));
+  const siblings = environmentsOf(page);
+  if (siblings) detail.append(siblings);
   const shots = screenshots(page);
   if (shots) detail.append(shots);
   const events = timeline(page.timeline);
@@ -382,7 +464,12 @@ function renderList(): void {
       'button',
       { className: 'page-item', type: 'button', 'aria-current': page.id === state.pageId ? 'true' : 'false' },
       h('span', { className: `dot ${page.status}`, title: page.status }),
-      h('span', {}, h('div', { className: 'path' }, pathOf(page.url)), h('div', { className: 'scenario' }, [page.scenario, page.mode].filter(Boolean).join(' · '))),
+      h(
+        'span',
+        {},
+        h('div', { className: 'path' }, pathOf(page.url)),
+        h('div', { className: 'scenario' }, [page.scenario, page.mode, page.flakiness ? `flaky ${Math.round(page.flakiness * 100)}%` : ''].filter(Boolean).join(' · ')),
+      ),
       h('span', {}, counts),
     );
     item.addEventListener('click', () => {
@@ -437,6 +524,9 @@ function header(): HTMLElement {
     ['Info', summary.issues.info, ''],
     ['Ignored', summary.ignored, ''],
   ];
+  if (summary.flaky !== undefined) tiles.push(['Flaky findings', summary.flaky, summary.flaky ? 'warning' : '']);
+  const proven = new Set(report.issues.filter((issue) => issue.cause?.proven).map((issue) => issue.fingerprint)).size;
+  if (report.issues.some((issue) => issue.probes)) tiles.push(['Proven causes', proven, proven ? 'ok' : '']);
   return h(
     'header',
     { className: 'header' },

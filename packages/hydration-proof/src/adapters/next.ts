@@ -66,4 +66,9 @@ export const nextAdapter: Adapter = {
   },
   markers: nextMarkers,
   devHost: 'localhost',
+  navigation: {
+    // App Router and Pages Router both expose their router as window.next.router.
+    navigate: `(url) => { const router = window.next && window.next.router; if (!router || typeof router.push !== 'function') return false; void Promise.resolve(router.push(url)).catch(() => {}); return true; }`,
+    prefetch: `(url) => { const router = window.next && window.next.router; if (!router || typeof router.prefetch !== 'function') return false; void Promise.resolve(router.prefetch(url)).catch(() => {}); return true; }`,
+  },
 };

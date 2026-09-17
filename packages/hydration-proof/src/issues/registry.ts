@@ -41,12 +41,18 @@ export type IssueCode =
   | 'HP3001'
   | 'HP3002'
   | 'HP3003'
+  | 'HP3004'
   | 'HP4001'
   | 'HP4002'
   | 'HP4003'
   | 'HP5001'
   | 'HP5002'
   | 'HP5003'
+  | 'HP5004'
+  | 'HP5005'
+  | 'HP5006'
+  | 'HP5007'
+  | 'HP5008'
   | 'HP6001'
   | 'HP6002'
   | 'HP6003'
@@ -119,6 +125,8 @@ const definitions: Record<IssueCode, Row> = {
     'Links, buttons and forms cannot contain another element of the same kind.'],
   HP3003: ['duplicate-id', 'Duplicate id attribute', 'info',
     'Several elements share the same id.'],
+  HP3004: ['duplicate-use-id', 'Two React roots generate the same ids', 'warning',
+    'Several React roots on the page use useId without an identifierPrefix, so they generate the same ids and labels or ARIA references can point at the wrong element.'],
 
   // HP4xxx — something outside React changed the page
   HP4001: ['pre-hydration-mutation', 'The page was modified before React hydrated', 'error',
@@ -128,13 +136,23 @@ const definitions: Record<IssueCode, Row> = {
   HP4003: ['html-rewritten', 'HTML was rewritten between the server and the browser', 'error',
     'The HTML the browser received differs from what the origin server produced (CDN minification, proxies, edge functions).'],
 
-  // HP5xxx — interaction and streaming (0.6)
-  HP5001: ['lost-interaction', 'An interaction before hydration was lost', 'error',
-    'A click or input made before hydration finished had no effect.'],
+  // HP5xxx — interactions and navigation
+  HP5001: ['lost-interaction', 'An interaction before hydration was lost', 'warning',
+    'A click made while the page was loading had no effect: the page looked ready before React could handle events.'],
   HP5002: ['input-reset', 'User input was reset during hydration', 'error',
-    'Text typed before hydration finished was cleared or replaced.'],
+    'Text typed or an option chosen before hydration finished was cleared or replaced.'],
   HP5003: ['focus-lost', 'Focus was lost during hydration', 'warning',
-    'The focused element was replaced during hydration.'],
+    'The focused element or the text selection was lost during hydration.'],
+  HP5004: ['navigation-mismatch', 'The page differs after client-side navigation', 'warning',
+    'Navigating to the route inside the app renders different content than loading the URL directly.'],
+  HP5005: ['navigation-error', 'Client-side navigation failed', 'error',
+    'Navigating to the route inside the app threw an error, its data request failed, or the URL never changed.'],
+  HP5006: ['double-handler', 'An element handles the same event twice', 'warning',
+    'A script or an inline handler attribute handles an event on an element that React also handles, so one action can run twice.'],
+  HP5007: ['scroll-reset', 'Scroll position was reset during hydration', 'warning',
+    'The page scrolled on its own while it hydrated, so the user lost their place.'],
+  HP5008: ['interaction-failed', 'A custom interaction failed', 'error',
+    'An interaction from the config threw an error or caused a page error.'],
 
   // HP6xxx — suppressHydrationWarning audit
   HP6001: ['suppressed-mismatch', 'Mismatch hidden by suppressHydrationWarning', 'info',

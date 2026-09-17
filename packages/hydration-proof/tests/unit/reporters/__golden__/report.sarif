@@ -1,0 +1,703 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "hydration-proof",
+          "version": "1.2.3",
+          "semanticVersion": "1.2.3",
+          "informationUri": "https://hydration.jscrate.dev",
+          "rules": [
+            {
+              "id": "HP1001",
+              "name": "TextMismatch",
+              "shortDescription": {
+                "text": "Text differs between server and client"
+              },
+              "fullDescription": {
+                "text": "The server HTML contains different text than the browser rendered during hydration."
+              },
+              "help": {
+                "text": "The server HTML contains different text than the browser rendered during hydration.\n\nHow to fix:\n- Render exactly the same text on the server and in the first client render.\n- Move browser-only or time-dependent values into useEffect, or compute them on the server and pass them down as props.\n\nhttps://hydration.jscrate.dev/docs/issues/hp1001",
+                "markdown": "The server HTML contains different text than the browser rendered during hydration.\n\n**How to fix**\n\n- Render exactly the same text on the server and in the first client render.\n- Move browser-only or time-dependent values into useEffect, or compute them on the server and pass them down as props.\n\n[Documentation](https://hydration.jscrate.dev/docs/issues/hp1001)"
+              },
+              "helpUri": "https://hydration.jscrate.dev/docs/issues/hp1001",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "hydration",
+                  "react",
+                  "dom-mismatch"
+                ]
+              }
+            },
+            {
+              "id": "HP1002",
+              "name": "AttributeMismatch",
+              "shortDescription": {
+                "text": "Attribute differs between server and client"
+              },
+              "fullDescription": {
+                "text": "An attribute value in the server HTML differs from the value React rendered on the client. React does not patch attributes during hydration."
+              },
+              "help": {
+                "text": "An attribute value in the server HTML differs from the value React rendered on the client. React does not patch attributes during hydration.\n\nHow to fix:\n- Compute the attribute from data that is identical on the server and the client.\n- React does not fix attributes during hydration, so users keep seeing the server value until the next update.\n\nhttps://hydration.jscrate.dev/docs/issues/hp1002",
+                "markdown": "An attribute value in the server HTML differs from the value React rendered on the client. React does not patch attributes during hydration.\n\n**How to fix**\n\n- Compute the attribute from data that is identical on the server and the client.\n- React does not fix attributes during hydration, so users keep seeing the server value until the next update.\n\n[Documentation](https://hydration.jscrate.dev/docs/issues/hp1002)"
+              },
+              "helpUri": "https://hydration.jscrate.dev/docs/issues/hp1002",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "hydration",
+                  "react",
+                  "dom-mismatch"
+                ]
+              }
+            },
+            {
+              "id": "HP1004",
+              "name": "ClassMismatch",
+              "shortDescription": {
+                "text": "Class name differs between server and client"
+              },
+              "fullDescription": {
+                "text": "The class attribute rendered on the server differs from the className React renders on the client. The page keeps the server classes."
+              },
+              "help": {
+                "text": "The class attribute rendered on the server differs from the className React renders on the client. The page keeps the server classes.\n\nHow to fix:\n- Make class names deterministic between server and client.\n- For themes, read the preference on the server (for example from a cookie) or set the class with a pre-hydration script and suppressHydrationWarning on that element.\n- For CSS-in-JS, set up the library's server style registry so class names are generated in the same order.\n\nhttps://hydration.jscrate.dev/docs/issues/hp1004",
+                "markdown": "The class attribute rendered on the server differs from the className React renders on the client. The page keeps the server classes.\n\n**How to fix**\n\n- Make class names deterministic between server and client.\n- For themes, read the preference on the server (for example from a cookie) or set the class with a pre-hydration script and suppressHydrationWarning on that element.\n- For CSS-in-JS, set up the library's server style registry so class names are generated in the same order.\n\n[Documentation](https://hydration.jscrate.dev/docs/issues/hp1004)"
+              },
+              "helpUri": "https://hydration.jscrate.dev/docs/issues/hp1004",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "hydration",
+                  "react",
+                  "dom-mismatch"
+                ]
+              }
+            },
+            {
+              "id": "HP1005",
+              "name": "ExtraAttribute",
+              "shortDescription": {
+                "text": "Attribute only present in the server HTML"
+              },
+              "fullDescription": {
+                "text": "The server HTML has an attribute that React does not render on the client."
+              },
+              "help": {
+                "text": "The server HTML has an attribute that React does not render on the client.\n\nHow to fix:\n- Remove the attribute from the server output or render it on the client too.\n\nhttps://hydration.jscrate.dev/docs/issues/hp1005",
+                "markdown": "The server HTML has an attribute that React does not render on the client.\n\n**How to fix**\n\n- Remove the attribute from the server output or render it on the client too.\n\n[Documentation](https://hydration.jscrate.dev/docs/issues/hp1005)"
+              },
+              "helpUri": "https://hydration.jscrate.dev/docs/issues/hp1005",
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "hydration",
+                  "react",
+                  "dom-mismatch"
+                ]
+              }
+            },
+            {
+              "id": "HP1013",
+              "name": "InnerHtmlMismatch",
+              "shortDescription": {
+                "text": "dangerouslySetInnerHTML differs between server and client"
+              },
+              "fullDescription": {
+                "text": "The HTML injected with dangerouslySetInnerHTML differs between the server and the client. React does not patch it."
+              },
+              "help": {
+                "text": "The HTML injected with dangerouslySetInnerHTML differs between the server and the client. React does not patch it.\n\nHow to fix:\n- Make the injected HTML identical on server and client, or render it after mount.\n\nhttps://hydration.jscrate.dev/docs/issues/hp1013",
+                "markdown": "The HTML injected with dangerouslySetInnerHTML differs between the server and the client. React does not patch it.\n\n**How to fix**\n\n- Make the injected HTML identical on server and client, or render it after mount.\n\n[Documentation](https://hydration.jscrate.dev/docs/issues/hp1013)"
+              },
+              "helpUri": "https://hydration.jscrate.dev/docs/issues/hp1013",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "hydration",
+                  "react",
+                  "dom-mismatch"
+                ]
+              }
+            },
+            {
+              "id": "HP3003",
+              "name": "DuplicateId",
+              "shortDescription": {
+                "text": "Duplicate id attribute"
+              },
+              "fullDescription": {
+                "text": "Several elements share the same id."
+              },
+              "help": {
+                "text": "Several elements share the same id.\n\nHow to fix:\n- Give every element a unique id; generate ids for repeated components with useId.\n\nhttps://hydration.jscrate.dev/docs/issues/hp3003",
+                "markdown": "Several elements share the same id.\n\n**How to fix**\n\n- Give every element a unique id; generate ids for repeated components with useId.\n\n[Documentation](https://hydration.jscrate.dev/docs/issues/hp3003)"
+              },
+              "helpUri": "https://hydration.jscrate.dev/docs/issues/hp3003",
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "tags": [
+                  "hydration",
+                  "react",
+                  "invalid-html"
+                ]
+              }
+            },
+            {
+              "id": "HP9004",
+              "name": "NavigationFailed",
+              "shortDescription": {
+                "text": "The page could not be loaded"
+              },
+              "fullDescription": {
+                "text": "The browser could not navigate to the URL."
+              },
+              "help": {
+                "text": "The browser could not navigate to the URL.\n\nHow to fix:\n- Check that the server is running and the URL is correct.\n\nhttps://hydration.jscrate.dev/docs/issues/hp9004",
+                "markdown": "The browser could not navigate to the URL.\n\n**How to fix**\n\n- Check that the server is running and the URL is correct.\n\n[Documentation](https://hydration.jscrate.dev/docs/issues/hp9004)"
+              },
+              "helpUri": "https://hydration.jscrate.dev/docs/issues/hp9004",
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "hydration",
+                  "react",
+                  "test-run"
+                ]
+              }
+            },
+            {
+              "id": "HP9010",
+              "name": "UnexpectedRedirect",
+              "shortDescription": {
+                "text": "The route redirected somewhere else"
+              },
+              "fullDescription": {
+                "text": "The route ended on a different URL than requested (or than expectRedirect). A signed-in scenario that lands on a login page usually means its login did not work."
+              },
+              "help": {
+                "text": "The route ended on a different URL than requested (or than expectRedirect). A signed-in scenario that lands on a login page usually means its login did not work.\n\nHow to fix:\n- If the redirect is intended, set expectRedirect on the route, or limit the route to the scenarios that can open it (scenario include/exclude).\n- For signed-in scenarios, check the login step or the storage state file.\n\nhttps://hydration.jscrate.dev/docs/issues/hp9010",
+                "markdown": "The route ended on a different URL than requested (or than expectRedirect). A signed-in scenario that lands on a login page usually means its login did not work.\n\n**How to fix**\n\n- If the redirect is intended, set expectRedirect on the route, or limit the route to the scenarios that can open it (scenario include/exclude).\n- For signed-in scenarios, check the login step or the storage state file.\n\n[Documentation](https://hydration.jscrate.dev/docs/issues/hp9010)"
+              },
+              "helpUri": "https://hydration.jscrate.dev/docs/issues/hp9010",
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "tags": [
+                  "hydration",
+                  "react",
+                  "test-run"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "originalUriBaseIds": {
+        "%SRCROOT%": {
+          "uri": "file:///TMP/repo/",
+          "description": {
+            "text": "The repository root."
+          }
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "exitCode": 1,
+          "startTimeUtc": "2026-09-17T10:00:00.000Z",
+          "endTimeUtc": "2026-09-17T10:00:12.345Z",
+          "workingDirectory": {
+            "uri": "file:///TMP/repo/apps/web/"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "results": [
+        {
+          "ruleId": "HP9004",
+          "ruleIndex": "index of HP9004",
+          "level": "error",
+          "message": {
+            "text": "The page could not be loaded on /broken (scenario guest, production build).\nnet::ERR_CONNECTION_REFUSED at http://127.0.0.1:4173/broken\nNo source location was found. This result is attached to apps/web/hydration-proof.config.ts."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/hydration-proof.config.ts",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/broken",
+                  "fullyQualifiedName": "guest/production:/broken",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "b8b8b8b8b8b8b8b8"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/broken",
+            "routePattern": "/broken",
+            "scenario": "guest",
+            "mode": "production",
+            "stage": "runtime",
+            "confidence": 1,
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp9004"
+          }
+        },
+        {
+          "ruleId": "HP1001",
+          "ruleIndex": "index of HP1001",
+          "level": "error",
+          "message": {
+            "text": "Text differs between server and client on /products/1?ref=a,b (scenario guest, production build).\nServer rendered \"Price: 10%\", the client rendered \"Price: 12%\".\nElement: #price\nLikely cause: Time-dependent value (97% confidence).\nFix: Move time-dependent values into useEffect."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/products/[id]/page.tsx",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 7
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/products/[id]",
+                  "fullyQualifiedName": "guest/production:/products/[id]",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "a1a1a1a1a1a1a1a1"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/products/1?ref=a,b",
+            "routePattern": "/products/[id]",
+            "scenario": "guest",
+            "mode": "production",
+            "stage": "hydration",
+            "confidence": 0.95,
+            "selector": "#price",
+            "component": "Price",
+            "server": "Price: 10%\nnow",
+            "client": "Price: 12%\r\nlater",
+            "causeId": "time",
+            "causeConfidence": 0.97,
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp1001"
+          }
+        },
+        {
+          "ruleId": "HP1001",
+          "ruleIndex": "index of HP1001",
+          "level": "error",
+          "message": {
+            "text": "Text differs between server and client on /products/1?ref=a,b (scenario admin, production build).\nServer rendered \"Price: 10%\", the client rendered \"Price: 12%\".\nElement: #price\nLikely cause: Time-dependent value (97% confidence).\nFix: Move time-dependent values into useEffect."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/products/[id]/page.tsx",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 7
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/products/[id]",
+                  "fullyQualifiedName": "admin/production:/products/[id]",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "a1a1a1a1a1a1a1a1"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/products/1?ref=a,b",
+            "routePattern": "/products/[id]",
+            "scenario": "admin",
+            "mode": "production",
+            "stage": "hydration",
+            "confidence": 0.95,
+            "selector": "#price",
+            "component": "Price",
+            "server": "Price: 10%\nnow",
+            "client": "Price: 12%\r\nlater",
+            "causeId": "time",
+            "causeConfidence": 0.97,
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp1001"
+          }
+        },
+        {
+          "ruleId": "HP1001",
+          "ruleIndex": "index of HP1001",
+          "level": "error",
+          "message": {
+            "text": "Text differs between server and client on /products/1?ref=a,b (scenario guest, development build).\nServer rendered \"Price: 10%\", the client rendered \"Price: 12%\".\nElement: #price\nLikely cause: Time-dependent value (97% confidence).\nFix: Move time-dependent values into useEffect."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/products/[id]/page.tsx",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 7
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/products/[id]",
+                  "fullyQualifiedName": "guest/development:/products/[id]",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "a1a1a1a1a1a1a1a1"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/products/1?ref=a,b",
+            "routePattern": "/products/[id]",
+            "scenario": "guest",
+            "mode": "development",
+            "stage": "hydration",
+            "confidence": 0.95,
+            "selector": "#price",
+            "component": "Price",
+            "server": "Price: 10%\nnow",
+            "client": "Price: 12%\r\nlater",
+            "causeId": "time",
+            "causeConfidence": 0.97,
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp1001"
+          }
+        },
+        {
+          "ruleId": "HP1013",
+          "ruleIndex": "index of HP1013",
+          "level": "error",
+          "message": {
+            "text": "dangerouslySetInnerHTML differs between server and client on /nasty (scenario guest, production build).\ndangerouslySetInnerHTML differs between server and client.\nElement: div[data-x=\"a|b\"] > p:nth-child(2)\nFix: Sanitize <html> & use `useEffect` | done."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/nasty/page.tsx",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 40
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/nasty",
+                  "fullyQualifiedName": "guest/production:/nasty",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "e5e5e5e5e5e5e5e5"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/nasty",
+            "routePattern": "/nasty",
+            "scenario": "guest",
+            "mode": "production",
+            "stage": "hydration",
+            "confidence": 0.85,
+            "selector": "div[data-x=\"a|b\"] > p:nth-child(2)",
+            "server": "100% ]]></failure><x a=\"1\" b='2'>&amp; | `tick` ``` a:b,c \u0000\u0007\b\u000b\f\u001b\u007f\u0085\u009f 🎉 \ud800 end\r\nnext",
+            "client": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx````yyyyyyyyyy",
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp1013"
+          }
+        },
+        {
+          "ruleId": "HP1004",
+          "ruleIndex": "index of HP1004",
+          "level": "error",
+          "message": {
+            "text": "Class name differs between server and client on /products/1?ref=a,b (scenario guest, production build).\nClass name differs between server and client.\nElement: main > button.btn (attribute class)\nLikely cause: CSS-in-JS class names differ (60% confidence)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "packages/ui/src/Button.tsx",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/products/[id]",
+                  "fullyQualifiedName": "guest/production:/products/[id]",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "b2b2b2b2b2b2b2b2"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/products/1?ref=a,b",
+            "routePattern": "/products/[id]",
+            "scenario": "guest",
+            "mode": "production",
+            "stage": "hydration",
+            "confidence": 0.7,
+            "selector": "main > button.btn",
+            "attribute": "class",
+            "server": "btn a:b,c",
+            "client": "btn <x>",
+            "causeId": "css-in-js",
+            "causeConfidence": 0.6,
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp1004"
+          }
+        },
+        {
+          "ruleId": "HP9010",
+          "ruleIndex": "index of HP9010",
+          "level": "warning",
+          "message": {
+            "text": "The route redirected somewhere else on /docs (scenario guest, production build).\nThe route /docs ended on /login.\nNo source location was found. This result is attached to apps/web/hydration-proof.config.ts."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/hydration-proof.config.ts",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/docs",
+                  "fullyQualifiedName": "guest/production:/docs",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "d4d4d4d4d4d4d4d4"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/docs",
+            "routePattern": "/docs",
+            "scenario": "guest",
+            "mode": "production",
+            "stage": "runtime",
+            "confidence": 0.9,
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp9010"
+          }
+        },
+        {
+          "ruleId": "HP1005",
+          "ruleIndex": "index of HP1005",
+          "level": "warning",
+          "message": {
+            "text": "Attribute only present in the server HTML on /products/1?ref=a,b (scenario guest, production build).\nAttribute only present in the server HTML.\nElement: input[name=\"q\"] (attribute data-lastpass)\nNo source location: The scripts have no source maps. This result is attached to apps/web/hydration-proof.config.ts."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/hydration-proof.config.ts",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/products/[id]",
+                  "fullyQualifiedName": "guest/production:/products/[id]",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "c3c3c3c3c3c3c3c3"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/products/1?ref=a,b",
+            "routePattern": "/products/[id]",
+            "scenario": "guest",
+            "mode": "production",
+            "stage": "hydration",
+            "confidence": 0.6,
+            "selector": "input[name=\"q\"]",
+            "attribute": "data-lastpass",
+            "server": "on",
+            "client": null,
+            "sourceUnavailableReason": "The scripts have no source maps.",
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp1005"
+          }
+        },
+        {
+          "ruleId": "HP3003",
+          "ruleIndex": "index of HP3003",
+          "level": "note",
+          "message": {
+            "text": "Duplicate id attribute on /nasty (scenario guest, production build).\nTwo elements use id=\"main\" 🎉.\nElement: #main\nNo source location was found. This result is attached to apps/web/hydration-proof.config.ts."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/hydration-proof.config.ts",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/nasty",
+                  "fullyQualifiedName": "guest/production:/nasty",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "f6f6f6f6f6f6f6f6"
+          },
+          "properties": {
+            "url": "http://127.0.0.1:4173/nasty",
+            "routePattern": "/nasty",
+            "scenario": "guest",
+            "mode": "production",
+            "stage": "parsed",
+            "confidence": 0.5,
+            "selector": "#main",
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp3003"
+          }
+        },
+        {
+          "ruleId": "HP1002",
+          "ruleIndex": "index of HP1002",
+          "level": "error",
+          "message": {
+            "text": "Attribute differs between server and client on /nasty (scenario guest, production build).\nAttribute differs between server and client.\nElement: body (attribute data-analytics)\nNo source location was found. This result is attached to apps/web/hydration-proof.config.ts."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/hydration-proof.config.ts",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "/nasty",
+                  "fullyQualifiedName": "guest/production:/nasty",
+                  "kind": "resource"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "hydrationProof/v1": "a7a7a7a7a7a7a7a7"
+          },
+          "suppressions": [
+            {
+              "kind": "external",
+              "status": "accepted",
+              "justification": "Known analytics attribute (code HP1002 on /nasty)"
+            }
+          ],
+          "properties": {
+            "url": "http://127.0.0.1:4173/nasty",
+            "routePattern": "/nasty",
+            "scenario": "guest",
+            "mode": "production",
+            "stage": "hydration",
+            "confidence": 0.8,
+            "selector": "body",
+            "attribute": "data-analytics",
+            "server": "1",
+            "client": "2",
+            "docsUrl": "https://hydration.jscrate.dev/docs/issues/hp1002"
+          }
+        }
+      ],
+      "properties": {
+        "summary": {
+          "pages": 7,
+          "routes": 5,
+          "passed": 1,
+          "warnings": 1,
+          "failed": 4,
+          "errored": 1,
+          "issues": {
+            "error": 6,
+            "warning": 2,
+            "info": 1
+          },
+          "ignored": 1
+        }
+      }
+    }
+  ]
+}

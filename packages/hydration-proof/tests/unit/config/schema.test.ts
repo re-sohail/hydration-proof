@@ -26,7 +26,7 @@ const everything: Required<HydrationProofConfig> = {
     paths: [
       '/',
       { path: '/404-page', pattern: '/404-page', expectStatus: [404], scenarios: ['default'], ready: { quietMs: 10 } },
-      { path: '/account', expectRedirect: '/login' },
+      { path: '/account', expectRedirect: '/login', navigateFrom: '/home' },
     ],
     dynamic: { '/products/[id]': ['1', '42'] },
     include: ['/**'],
@@ -62,6 +62,13 @@ const everything: Required<HydrationProofConfig> = {
       ],
       include: ['/account/**'],
       exclude: ['/account/billing'],
+      query: { currency: 'EUR' },
+      browser: 'webkit',
+      network: { name: 'hotel wifi', downloadKbps: 800, uploadKbps: 200, latencyMs: 250 },
+      cpu: 1,
+      cache: 'warm',
+      clock: '2026-01-01T00:00:00Z',
+      randomSeed: 42,
     },
     { name: 'sized', viewport: { width: 100, height: 200 } },
   ],
@@ -76,6 +83,8 @@ const everything: Required<HydrationProofConfig> = {
     invalidHtml: true,
     externalChanges: true,
     suppressedWarnings: 'strict',
+    interactions: true,
+    navigation: { from: '/', prefetch: false, maxRoutes: 5 },
   },
   ignore: {
     selectors: ['.ad'],
@@ -92,6 +101,35 @@ const everything: Required<HydrationProofConfig> = {
     teardown: () => {},
   },
   cache: false,
+  matrix: {
+    locale: ['en-US', 'de-DE'],
+    timezoneId: ['UTC', 'Asia/Karachi'],
+    colorScheme: ['light', 'dark'],
+    reducedMotion: ['no-preference', 'reduce'],
+    viewport: ['desktop', { width: 390, height: 844 }],
+    browser: ['chromium', 'firefox'],
+    network: ['fast', 'slow-3g'],
+    cpu: [1, 4],
+    cache: ['cold', 'warm'],
+    axes: { tenant: { acme: { headers: { 'x-tenant': 'acme' } }, globex: { query: { tenant: 'globex' } } } },
+    strategy: 'pairwise',
+    max: 20,
+    seed: 3,
+    scenarios: ['everything'],
+  },
+  probes: { factors: ['time', 'random', 'locale', 'timezone', 'theme', 'viewport', 'storage'], maxPages: 3 },
+  repeat: 2,
+  interactions: [
+    {
+      route: '/checkout',
+      name: 'continue',
+      when: 'before-hydration',
+      scenarios: ['everything'],
+      steps: async ({ page }) => {
+        await page.click('#continue');
+      },
+    },
+  ],
 };
 
 describe('config schema', () => {
@@ -129,7 +167,8 @@ describe('config schema', () => {
     const validate = ajv.compile(configJsonSchema());
     // RegExps (and functions) have no JSON form.
     const scenarios = everything.scenarios.map((scenario) => ({ ...scenario, mocks: scenario.mocks?.filter((mock) => typeof mock.url === 'string') }));
-    const json = JSON.parse(JSON.stringify({ ...everything, scenarios, ignore: { selectors: ['.ad'], attributes: ['x'] } }));
+    const { interactions: _functionsOnly, ...rest } = everything;
+    const json = JSON.parse(JSON.stringify({ ...rest, scenarios, ignore: { selectors: ['.ad'], attributes: ['x'] } }));
     expect(validate(json), JSON.stringify(validate.errors)).toBe(true);
     expect(validate({ unknown: true })).toBe(false);
     expect(validate({ workers: 0 })).toBe(false);

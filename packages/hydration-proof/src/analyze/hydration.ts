@@ -6,6 +6,7 @@ import { diffTrees, type DomChange } from '../dom/diff.ts';
 import { normalizeTree, sameClassList, sameStyle, type NormalizeOptions } from '../dom/normalize.ts';
 import { rewind } from '../dom/rewind.ts';
 import { getAttr, indexTree, isElement, isText, outline, textContent, toHtml, walk, type TreeIndex } from '../dom/tree.ts';
+import { FORM_STATE_NOTE } from '../diagnose/index.ts';
 import { describeValue, locate, locator, placed, type Draft, type Locator } from './draft.ts';
 
 // Analyse each commit that hydrated a root or a Suspense boundary:
@@ -379,6 +380,23 @@ function auditElement(post: SElement, pre: SElement, event: HydrationEvent, repo
     }
   }
 
+  if (client.handlers?.length && !suppressed) {
+    const events = client.handlers;
+    drafts.push(
+      placed(
+        {
+          ...base,
+          code: 'HP5006',
+          confidence: 0.7,
+          excerpt: views,
+          message: `React handles ${events.map((type) => `"${type}"`).join(', ')} on this element, and ${events.length === 1 ? 'so does' : 'so do'} a script listener or an inline on${events[0]} attribute. One action can run twice.`,
+          evidence: [{ kind: 'note', message: `Events handled twice: ${events.join(', ')}.` }],
+        },
+        location,
+      ),
+    );
+  }
+
   if (client.htmlMatch === false) {
     emit('HP1013', {
       confidence: 0.85,
@@ -414,6 +432,30 @@ function auditElement(post: SElement, pre: SElement, event: HydrationEvent, repo
   return drafts;
 }
 
+/** Ids of <form> elements the server rendered with Server Action state (preceded by `<!--F!-->`). */
+export function formsWithState(tree: SNode | ReturnType<typeof rewind>['tree']): Set<number> {
+  const forms = new Set<number>();
+  walk(tree, (node) => {
+    const children = 'children' in node ? node.children : undefined;
+    if (!children) return;
+    children.forEach((child, index) => {
+      if (child.k !== 8 || child.text !== 'F!') return;
+      const next = children.slice(index + 1).find((sibling) => !(isText(sibling) && sibling.text.trim() === ''));
+      if (isElement(next) && next.tag === 'form') forms.add(next.id);
+    });
+  });
+  return forms;
+}
+
+function insideAny(index: TreeIndex, id: number | undefined, ancestors: Set<number>): boolean {
+  let current = id === undefined ? undefined : index.get(id);
+  while (current) {
+    if (ancestors.has(current.node.id)) return true;
+    current = current.parent ? index.get(current.parent.id) : undefined;
+  }
+  return false;
+}
+
 export function analyzeHydration(input: HydrationInput): HydrationResult {
   const drafts: Draft[] = [];
   const events: HydrationEvent[] = [];
@@ -440,6 +482,8 @@ export function analyzeHydration(input: HydrationInput): HydrationResult {
     };
     events.push(event);
 
+    const statefulForms = formsWithState(rewound.tree);
+    const firstDraft = drafts.length;
     const changes = diffTrees(preTree, postTree, { identity: true, sameAttribute });
     const replaced = new Map<number, Evidence>();
     changes.forEach((change, position) => {
@@ -516,14 +560,21 @@ export function analyzeHydration(input: HydrationInput): HydrationResult {
       );
     }
 
-    if (!input.propsAudit) continue;
-    walk(postTree, (node) => {
-      if (!isElement(node) || audited.has(node.id)) return;
-      const preNode = pre.get(node.id)?.node;
-      if (!isElement(preNode) || !node.client) return;
-      audited.add(node.id);
-      drafts.push(...auditElement(node, preNode, event, input.reportUnusedSuppression, input.normalize));
-    });
+    if (input.propsAudit) {
+      walk(postTree, (node) => {
+        if (!isElement(node) || audited.has(node.id)) return;
+        const preNode = pre.get(node.id)?.node;
+        if (!isElement(preNode) || !node.client) return;
+        audited.add(node.id);
+        drafts.push(...auditElement(node, preNode, event, input.reportUnusedSuppression, input.normalize));
+      });
+    }
+
+    if (statefulForms.size > 0) {
+      for (const draft of drafts.slice(firstDraft)) {
+        if (insideAny(post, draft.nodeId, statefulForms)) draft.evidence.push({ kind: 'note', message: FORM_STATE_NOTE });
+      }
+    }
   }
   return { drafts, events };
 }

@@ -27,6 +27,10 @@ const SUGGESTIONS: Partial<Record<IssueCode, string[]>> = {
   HP1011: ['Fix the mismatch or wrap the unstable part in a Suspense boundary so React only re-renders that part.'],
   HP1012: ['Use defaultValue/defaultChecked with values that are identical on server and client.'],
   HP1013: ['Make the injected HTML identical on server and client, or render it after mount.'],
+  HP1014: [
+    'Render the same <title> and <meta> tags on the server and the client, so search engines, link previews and the first paint show the final values.',
+    'Compute head values from data the server has (route params, cookies) instead of browser-only values.',
+  ],
   HP1015: [
     'Turn off HTML minification that removes whitespace (for example CDN "Auto Minify") for server-rendered React pages.',
     'Avoid relying on whitespace-only text nodes between elements.',
@@ -41,12 +45,39 @@ const SUGGESTIONS: Partial<Record<IssueCode, string[]>> = {
     'The browser rewrites invalid markup before React hydrates, so the DOM never matches what React rendered.',
   ],
   HP3002: ['Do not nest links inside links, buttons inside buttons or forms inside forms.'],
+  HP3003: ['Give every element a unique id; generate ids for repeated components with useId.'],
+  HP3004: [
+    'Give every React root on the page its own identifierPrefix (hydrateRoot(container, element, { identifierPrefix: "app-" })).',
+    'Or render the parts in one root (for example with portals), so useId generates unique ids.',
+  ],
   HP4001: [
     'Find the script that changes the DOM before hydration and run it after hydration, or make it change only elements outside React\'s tree.',
     'If a browser extension causes this, it cannot be fixed in code; add an ignore rule for the extension\'s attributes.',
   ],
   HP4002: ['This comes from a browser extension on the test machine or simulated by your scenario; ignore it if it is expected.'],
   HP4003: ['Disable HTML rewriting (minification, email obfuscation, injection) for server-rendered pages at the CDN or proxy.'],
+  HP5001: [
+    'Keep controls disabled (or show them as loading) until the page is interactive, or make them work without JavaScript (links, forms with Server Actions).',
+    'Ship less JavaScript for the first view and hydrate important controls first (Suspense boundaries hydrate in order of interaction).',
+  ],
+  HP5002: [
+    'Use uncontrolled inputs (defaultValue/defaultChecked) or read the current DOM value when the component mounts, so text typed before hydration is kept.',
+    'Fix any hydration mismatch around the form: a re-rendered branch creates new, empty inputs.',
+  ],
+  HP5003: ['Avoid re-creating the focused element during hydration (fix mismatches around it), and do not move focus in effects that run on load.'],
+  HP5004: [
+    'Render the same content for a route whether it is loaded directly or reached through client-side navigation: read data from the route (params, search params, server data), not from the previous page or client state.',
+    'Check layouts that keep state between navigations and components that depend on the previous route.',
+  ],
+  HP5005: [
+    'Open the route through a link in the browser and check the console and the network tab for the failed request.',
+    'Make sure server components of the route do not throw for requests that come from client-side navigation (RSC requests).',
+  ],
+  HP5006: [
+    'Handle the event in one place: remove the inline on* attribute or the script that adds the listener, or remove the React handler.',
+  ],
+  HP5007: ['Do not change the scroll position during hydration (scrollTo in effects, focus() on load); let the browser restore it.'],
+  HP5008: ['Run the interaction in a headed browser (--headed) to see where it fails.'],
   HP6001: [
     'This is fine if the difference is intentional (timestamps, for example). Keep suppressHydrationWarning on the smallest element possible.',
   ],

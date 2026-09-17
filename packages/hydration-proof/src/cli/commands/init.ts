@@ -49,6 +49,14 @@ ${dynamicLines}
     // { name: 'karachi', locale: 'ur-PK', timezoneId: 'Asia/Karachi' },
   ],
 
+  // Test every scenario in more environments (every pair of values is covered):
+  // matrix: {
+  //   locale: ['en-US', 'de-DE'],
+  //   timezoneId: ['UTC', 'Asia/Karachi'],
+  //   colorScheme: ['light', 'dark'],
+  //   browser: ['chromium', 'firefox', 'webkit'],
+  // },
+
   reporters: ['list', 'json'],
 ${footer}
 `;

@@ -66,6 +66,7 @@ Route objects:
 | `expectRedirect` | Path the route is expected to end on. Without it, ending on another path is reported as HP9010 |
 | `scenarios` | Only test the route in these scenarios |
 | `ready` | Per-route `ready` options |
+| `navigateFrom` | Page the navigation check starts from for this route |
 
 Globs: `*` matches one path segment, `**` any number (`/blog/**` also matches `/blog`). Dynamic values fill parameters in order; separate values for several parameters with `/`, and a catch-all takes the rest: `'/[lang]/docs/[...slug]': ['en/getting-started/install']`.
 
@@ -108,6 +109,15 @@ The browser environments every route is tested in. Default: one scenario named `
 | `mocks` | Answers for browser requests: `[{ url, method?, status?, headers?, body? }]`. `url` is a glob or a RegExp; object bodies are sent as JSON. Requests the server makes are not affected |
 | `include` | Only test routes matching these globs in this scenario |
 | `exclude` | Skip routes matching these globs in this scenario |
+| `query` | Query parameters added to every URL, e.g. `{ currency: 'EUR' }` |
+| `browser` | `'chromium'`, `'firefox'` or `'webkit'` for this scenario (default: `browser.name`) |
+| `network` | Throttled network: `'fast-3g'`, `'slow-3g'` or `{ downloadKbps, uploadKbps, latencyMs }` |
+| `cpu` | Slow down JavaScript by this factor, e.g. `4` (Chromium only) |
+| `cache` | `'warm'` loads the page once before testing it, like a returning visitor (default `'cold'`) |
+| `clock` | Fixed browser time (ISO date or epoch milliseconds) for `Date.now()` and `new Date()` |
+| `randomSeed` | Seed for `Math.random()` and `crypto.getRandomValues()` in the browser |
+
+`clock` and `randomSeed` are diagnostic options: they only change the browser, and the server keeps its real clock, so time-dependent and random output is still found. They make the client values repeatable between runs.
 
 ### Signed-in pages
 
@@ -138,6 +148,71 @@ Each login runs once per run (in a browser context with the scenario's settings)
 
 Other ways to sign in: `storageState` (a file saved by Playwright), `cookies`, or an `authorization` entry in `headers`.
 
+## `matrix`
+
+Tests every scenario in combinations of environments, so problems that only show up in one locale, timezone, theme, screen size or browser are found.
+
+```ts
+matrix: {
+  locale: ['en-US', 'de-DE', 'ar-EG'],
+  timezoneId: ['UTC', 'Asia/Karachi', 'America/Los_Angeles'],
+  colorScheme: ['light', 'dark'],
+  viewport: ['desktop', 'mobile'],
+  browser: ['chromium', 'firefox', 'webkit'],
+  // Custom axes: feature flags, tenants, currencies, ...
+  axes: {
+    checkout: {
+      new: { cookies: [{ name: 'flag-checkout', value: 'new' }] },
+      old: {},
+    },
+    tenant: {
+      acme: { headers: { 'x-tenant': 'acme' } },
+      globex: { query: { tenant: 'globex' } },
+    },
+  },
+},
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `locale`, `timezoneId`, `colorScheme`, `reducedMotion`, `viewport`, `browser` | | Values to test, like the scenario options of the same name |
+| `network` | | `'fast'` (no throttling), `'fast-3g'`, `'slow-3g'` or custom values |
+| `cpu` | | CPU slowdown factors, e.g. `[1, 4]` (Chromium only) |
+| `cache` | | `['cold', 'warm']` |
+| `axes` | | Custom axes: axis name → value name → scenario settings (`cookies`, `headers`, `localStorage`, `sessionStorage`, `initScripts`, `query`) |
+| `strategy` | `'pairwise'` | `'pairwise'` tests every pair of values at least once, `'full'` every combination, `'sample'` a random subset |
+| `max` | `16` | Most environments per scenario |
+| `seed` | `1` | Seed for `'sample'` |
+| `scenarios` | all | Scenarios the matrix applies to |
+
+The first value of every axis is the baseline and is always tested. Pairwise testing keeps the matrix small: the example above has 3 × 3 × 2 × 2 × 3 × 2 × 2 = 432 combinations, and pairwise needs about 12 of them. With `'full'`, a matrix larger than `max` falls back to pairwise, with a note.
+
+Combinations a browser cannot run are left out, with a note: CPU slowdown needs Chromium, and Firefox and WebKit cannot combine network throttling with a warm cache. Firefox has no mobile emulation, so `'mobile'` there only sets the viewport size and touch. Mocks turn the HTTP cache off, so `'warm'` then only repeats the visit.
+
+Each environment is a scenario named after its values, e.g. `guest (de-DE, Asia/Karachi, firefox)`. `--scenario guest` selects all of them; `--no-matrix` tests the scenarios as configured. The login of a scenario runs once and is shared by its environments.
+
+When a finding appears in some environments and not in others, the report names the values that separate them, e.g. "Only found with locale de-DE" or "Only found with the production build" (with `--mode both`).
+
+## `probes`
+
+`probes: true` (or `--probe`) proves the cause of value mismatches. Pages with text or attribute differences are loaded again with the browser clock and random values fixed, then once more for each factor with exactly that one thing changed:
+
+| Factor | What changes |
+| --- | --- |
+| `time` | The browser clock moves by 3 days, 7 hours, 11 minutes and 13 seconds |
+| `random` | A different seed for `Math.random()` and `crypto.getRandomValues()` |
+| `locale` | The server's locale (or another one) |
+| `timezone` | The server's timezone (or another one) |
+| `theme` | Light ↔ dark |
+| `viewport` | Desktop ↔ mobile |
+| `storage` | Without the scenario's `localStorage`, `sessionStorage` and `storageState` (only when it has them) |
+
+A finding whose client value changes, or that disappears, when only one factor changes has that cause **proven**. A page that renders differently on an identical reload depends on server data. Options: `{ factors: ['time', 'random'], maxPages: 5 }`. Each probed page costs up to 9 extra page loads, so probes are off by default. They never hide a finding: fixing the clock is only used to compare runs.
+
+## `repeat`
+
+`repeat: 3` (or `--repeat 3`) loads every page three times. Findings that appear in only some runs are marked flaky ("seen in 2 of 3 runs") and still count: an intermittent mismatch is a real bug. Each page gets a flakiness score, the share of runs whose findings differ from the most common result.
+
 ## `ready`
 
 When a page counts as settled. `hydration-proof` never waits for "network idle".
@@ -152,16 +227,75 @@ When a page counts as settled. `hydration-proof` never waits for "network idle".
 
 ## `checks`
 
-All `true` by default.
+| Option | Default | Finds |
+| --- | --- | --- |
+| `reactErrors` | `true` | Errors and warnings React reports (HP2xxx) |
+| `domDiff` | `true` | DOM differences React produced while hydrating, in the root and in every Suspense boundary (HP1xxx), and `<head>` values hydration changed (HP1014) |
+| `propsAudit` | `true` | Attributes and text that differ from what React renders on the client, including the ones React never reports, and events handled twice (HP5006) |
+| `invalidHtml` | `true` | Markup the browser repairs, duplicate ids and useId collisions between React roots (HP3xxx) |
+| `externalChanges` | `true` | Changes made by other scripts before hydration (HP4xxx) |
+| `suppressedWarnings` | `'info'` | `'info'` lists differences hidden by `suppressHydrationWarning`; `'strict'` also flags unused suppression; `'off'` hides both |
+| `interactions` | `false` | Interactions while the page loads (below) |
+| `navigation` | `false` | Client-side navigation compared with direct loads (below) |
 
-| Option | Finds |
+### Interaction checks
+
+`checks.interactions: true` (or `--interactions`) loads every page with its scripts held back, like a user on a slow connection, and then:
+
+- types into the first text field, checks the first checkbox, selects text and scrolls, lets the page hydrate, and checks that the text (HP5002), the checkbox (HP5002), focus and selection (HP5003) and the scroll position (HP5007) survived;
+- clicks the first button outside forms and links and compares the result with the same click after hydration. A click that only works after hydration is reported as lost (HP5001, a warning: the page looks ready before it is).
+
+Pages without fields, buttons or scrollable content are skipped. Each page costs about six extra page loads.
+
+### Custom interactions
+
+```ts
+interactions: [
+  {
+    route: '/checkout',
+    name: 'continue to payment',
+    steps: async ({ page }) => {
+      await page.getByLabel('Email').fill('test@example.com');
+      await page.getByRole('button', { name: 'Continue' }).click();
+      await page.getByText('Payment').waitFor();
+    },
+  },
+  {
+    route: '/search',
+    name: 'type before the page is ready',
+    when: 'before-hydration',
+    steps: async ({ page }) => {
+      await page.fill('#query', 'shoes');
+    },
+  },
+],
+```
+
+| Field | Description |
 | --- | --- |
-| `reactErrors` | Errors and warnings React reports (HP2xxx) |
-| `domDiff` | DOM differences React produced while hydrating (HP1xxx) |
-| `propsAudit` | Attributes and text that differ from what React renders on the client, including the ones React never reports |
-| `invalidHtml` | Markup the browser repairs (HP3xxx) |
-| `externalChanges` | Changes made by other scripts before hydration (HP4xxx) |
-| `suppressedWarnings` | `'info'` (default) lists differences hidden by `suppressHydrationWarning`; `'strict'` also flags unused suppression; `'off'` hides both |
+| `route` | Route glob (matched against the path and the route pattern) |
+| `name` | Shown in reports |
+| `when` | `'after-hydration'` (default), or `'before-hydration'` to run while the page's scripts are held back |
+| `scenarios` | Only in these scenarios |
+| `steps` | `async ({ page, baseUrl, url }) => {}` with a Playwright page |
+
+An interaction that throws, or that causes an uncaught error on the page, is reported as HP5008.
+
+### Navigation checks
+
+`checks.navigation: true` (or `--navigation`) opens a page, navigates to each route with the app's router (`router.push` in Next.js, App Router and Pages Router) and compares the result with loading the route directly. Both loads use the same fixed browser clock and random seed, and numbers are ignored in the comparison.
+
+- Content that differs after navigation is reported as HP5004 (a warning). Routes that render parallel routes (`@slot` folders) or that an intercepting route can replace are reported as info, since the difference is usually intended.
+- An error thrown during navigation, a failed RSC request, or a URL that never changes is reported as HP5005.
+- Navigations the framework turns into a full page load (for example to another root layout) are noted in the timeline, not reported.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `from` | `'/'` | Page to navigate from (another tested page when the route is `/`) |
+| `prefetch` | `true` | Also navigate after the router prefetched the route |
+| `maxRoutes` | `20` | Most routes checked per scenario |
+
+A route can name its own starting page with `navigateFrom` (for example to test a modal that an intercepting route shows).
 
 ## `ignore`
 

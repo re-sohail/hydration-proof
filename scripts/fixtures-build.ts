@@ -11,7 +11,8 @@ const force = process.argv.includes('--force');
 function newestMtime(dir: string): number {
   let newest = 0;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name === '.next' || entry.name === 'dist') continue;
+    // Build output, dependencies and tool output (.next, .hydration-proof) do not count.
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.')) continue;
     const path = join(dir, entry.name);
     newest = Math.max(newest, entry.isDirectory() ? newestMtime(path) : statSync(path).mtimeMs);
   }

@@ -1,4 +1,4 @@
-import type { RuntimeData } from '../engine/capture.ts';
+import type { NetworkEntry, RuntimeData } from '../engine/capture.ts';
 import type { TimelineEntry } from '../report/model.ts';
 import { classifyReactMessage } from '../errors/react.ts';
 
@@ -10,9 +10,46 @@ function firstLine(text: string, max = 140): string {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
+const MAX_SCRIPTS = 20;
+
+function shortUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const file = parsed.pathname.split('/').pop() || parsed.pathname;
+    return parsed.pathname.length > 60 ? `…/${file}` : parsed.pathname + (parsed.search.length > 40 ? '?…' : parsed.search);
+  } catch {
+    return url;
+  }
+}
+
+function networkEntries(network: readonly NetworkEntry[], timeOrigin: number): TimelineEntry[] {
+  const out: TimelineEntry[] = [];
+  let scripts = 0;
+  for (const request of network) {
+    const started = request.start - timeOrigin;
+    if (request.failure !== undefined) {
+      out.push({ time: started, kind: 'network', label: `${request.type === 'rsc' ? 'RSC request' : 'Script'} failed: ${shortUrl(request.url)}`, detail: request.failure });
+      continue;
+    }
+    const time = started + (request.duration ?? 0);
+    if (request.type === 'script') {
+      if (++scripts > MAX_SCRIPTS) continue;
+      out.push({ time, kind: 'network', label: `Script loaded: ${shortUrl(request.url)}`, detail: `${request.duration ?? '?'}ms${request.status !== undefined && request.status >= 400 ? `, HTTP ${request.status}` : ''}` });
+    } else {
+      out.push({
+        time,
+        kind: 'network',
+        label: `${request.prefetch ? 'RSC prefetch' : 'RSC request'}: ${shortUrl(request.url)}`,
+        detail: `${request.status ?? '?'}, ${request.duration ?? '?'}ms`,
+      });
+    }
+  }
+  return out;
+}
+
 /** What happened on the page, in order, for the report. */
-export function buildTimeline(runtime: RuntimeData): TimelineEntry[] {
-  const entries: TimelineEntry[] = [];
+export function buildTimeline(runtime: RuntimeData, network: readonly NetworkEntry[] = [], timeOrigin?: number): TimelineEntry[] {
+  const entries: TimelineEntry[] = timeOrigin === undefined ? [] : networkEntries(network, timeOrigin);
   for (const renderer of runtime.renderers) {
     const build = renderer.bundleType === 0 ? 'production' : renderer.bundleType === 1 ? 'development' : 'unknown';
     entries.push({ time: renderer.time, kind: 'renderer', label: `React ${renderer.version} loaded (${build} build)` });
@@ -64,5 +101,9 @@ export function buildTimeline(runtime: RuntimeData): TimelineEntry[] {
     if (snapshot.kind === 'post-effect') entries.push({ time: snapshot.time, kind: 'snapshot', label: 'Effects settled' });
     if (snapshot.kind === 'stable') entries.push({ time: snapshot.time, kind: 'snapshot', label: 'Page settled' });
   }
-  return entries.sort((a, b) => a.time - b.time).slice(0, MAX_ENTRIES);
+  return entries
+    .filter((entry) => entry.time >= 0)
+    .sort((a, b) => a.time - b.time)
+    .slice(0, MAX_ENTRIES)
+    .map((entry) => ({ ...entry, time: Math.round(entry.time * 10) / 10 }));
 }

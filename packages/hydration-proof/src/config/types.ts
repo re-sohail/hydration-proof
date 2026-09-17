@@ -7,6 +7,12 @@ export type BrowserName = 'chromium' | 'firefox' | 'webkit';
 export type BuildMode = 'production' | 'development';
 export type ReporterName = 'list' | 'json' | 'html' | 'junit' | 'sarif' | 'github' | 'gitlab';
 export type ColorScheme = 'light' | 'dark' | 'no-preference';
+export type ViewportOption = { width: number; height: number } | 'mobile' | 'tablet' | 'desktop';
+/** Throttled network: a preset or custom values. `fast` means no throttling. */
+export type NetworkProfile = 'fast' | 'fast-3g' | 'slow-3g' | { name?: string; downloadKbps: number; uploadKbps: number; latencyMs: number };
+export type CacheState = 'cold' | 'warm';
+/** What a probe run changes to prove a cause. */
+export type ProbeFactor = 'time' | 'random' | 'locale' | 'timezone' | 'theme' | 'viewport' | 'storage';
 
 export interface ServerConfig {
   /** Command that starts the app. `{port}` is replaced with the chosen port. Defaults to the adapter's start command. */
@@ -46,6 +52,8 @@ export interface RouteEntry {
   scenarios?: string[];
   /** Per-route readiness overrides. */
   ready?: ReadyConfig;
+  /** Page the navigation check starts from for this route (default: `checks.navigation.from`). */
+  navigateFrom?: string;
 }
 
 export interface RoutesConfig {
@@ -114,7 +122,7 @@ export interface ScenarioConfig {
   colorScheme?: ColorScheme;
   reducedMotion?: 'reduce' | 'no-preference';
   /** Viewport size, or a preset. */
-  viewport?: { width: number; height: number } | 'mobile' | 'tablet' | 'desktop';
+  viewport?: ViewportOption;
   userAgent?: string;
   /** Playwright storage state file (cookies and localStorage), e.g. a logged-in user. */
   storageState?: string;
@@ -136,6 +144,69 @@ export interface ScenarioConfig {
   include?: string[];
   /** Skip routes matching these globs in this scenario. */
   exclude?: string[];
+  /** Query parameters added to every URL (e.g. `{ currency: 'EUR' }`). */
+  query?: Record<string, string>;
+  /** Browser for this scenario. Default: `browser.name`. */
+  browser?: BrowserName;
+  /** Throttle the network (Chromium natively; other browsers delay subresources). */
+  network?: NetworkProfile;
+  /** Slow down JavaScript by this factor (Chromium only). */
+  cpu?: number;
+  /** `warm` loads the page once before testing it, like a returning visitor. Default `cold`. */
+  cache?: CacheState;
+  /**
+   * Fixed browser time (ISO string or epoch ms) for `Date.now()` / `new Date()`.
+   * A diagnostic option: the server keeps its real clock, so time-dependent
+   * output is still found.
+   */
+  clock?: string | number;
+  /** Seed for `Math.random()` and `crypto.getRandomValues()` in the browser (diagnostic, like `clock`). */
+  randomSeed?: number;
+}
+
+/** Scenario settings one value of a custom matrix axis applies (feature flags, tenants, currencies, ...). */
+export interface ScenarioVariant {
+  cookies?: CookieConfig[];
+  headers?: Record<string, string>;
+  localStorage?: Record<string, string>;
+  sessionStorage?: Record<string, string>;
+  initScripts?: string[];
+  query?: Record<string, string>;
+}
+
+export interface MatrixConfig {
+  /** Locales to test, e.g. `['en-US', 'de-DE', 'ar-EG']`. */
+  locale?: string[];
+  /** Timezones to test, e.g. `['UTC', 'Asia/Karachi', 'America/Los_Angeles']`. */
+  timezoneId?: string[];
+  colorScheme?: ColorScheme[];
+  reducedMotion?: ('reduce' | 'no-preference')[];
+  viewport?: ViewportOption[];
+  browser?: BrowserName[];
+  network?: NetworkProfile[];
+  /** CPU slowdown factors (Chromium only); `1` is no slowdown. */
+  cpu?: number[];
+  cache?: CacheState[];
+  /**
+   * Custom axes: axis name → value name → scenario settings.
+   * `{ flags: { 'new-checkout': { cookies: [{ name: 'flag', value: 'on' }] }, 'old-checkout': {} } }`
+   */
+  axes?: Record<string, Record<string, ScenarioVariant>>;
+  /** `pairwise` (default) covers every pair of values, `full` every combination, `sample` a random subset. */
+  strategy?: 'pairwise' | 'full' | 'sample';
+  /** Most environments per scenario. Default 16. */
+  max?: number;
+  /** Seed for `sample`. Default 1. */
+  seed?: number;
+  /** Scenarios the matrix applies to. Default: all. */
+  scenarios?: string[];
+}
+
+export interface ProbesConfig {
+  /** What to vary. Default: all that apply. */
+  factors?: ProbeFactor[];
+  /** Most pages probed per run. Default 5. */
+  maxPages?: number;
 }
 
 export interface HookContext {
@@ -148,6 +219,38 @@ export interface HooksConfig {
   setup?: (context: HookContext) => Promise<void | (() => Promise<void> | void)> | void | (() => Promise<void> | void);
   /** Runs once after all pages are tested. */
   teardown?: (context: HookContext) => Promise<void> | void;
+}
+
+export interface InteractionContext {
+  /** The page, already loaded (and hydrated, unless `when` is `before-hydration`). */
+  page: import('playwright-core').Page;
+  baseUrl: string;
+  /** The URL that was loaded. */
+  url: string;
+}
+
+export interface InteractionConfig {
+  /** Route glob the interaction runs on, e.g. `/checkout` or `/products/**`. */
+  route: string;
+  /** Shown in reports. */
+  name?: string;
+  /**
+   * `after-hydration` (default): run once the page is interactive.
+   * `before-hydration`: run while the page's scripts are still held back, like a user on a slow connection.
+   */
+  when?: 'before-hydration' | 'after-hydration';
+  /** Only in these scenarios. */
+  scenarios?: string[];
+  steps: (context: InteractionContext) => Promise<void>;
+}
+
+export interface NavigationConfig {
+  /** Page to navigate from. Default `/` (another tested route when the target is `/`). */
+  from?: string;
+  /** Also navigate after the router prefetched the route. Default true. */
+  prefetch?: boolean;
+  /** Most routes checked per scenario. Default 20. */
+  maxRoutes?: number;
 }
 
 export interface ReadyConfig {
@@ -176,6 +279,10 @@ export interface ChecksConfig {
   externalChanges?: boolean;
   /** How to treat suppressHydrationWarning: report suppressed differences as info, or also flag unused suppression. Default `"info"`. */
   suppressedWarnings?: 'off' | 'info' | 'strict';
+  /** Type, click, focus and scroll while the page loads and check nothing is lost. Default false. */
+  interactions?: boolean;
+  /** Compare client-side navigation to each route with loading it directly (Next.js). Default false. */
+  navigation?: boolean | NavigationConfig;
 }
 
 export interface IgnoreRule {
@@ -204,15 +311,60 @@ export interface IgnoreConfig {
   issues?: IgnoreRule[];
 }
 
+export interface BudgetLimits {
+  error?: number;
+  warning?: number;
+  info?: number;
+}
+
+export interface BudgetConfig extends BudgetLimits {
+  /** Limits for the findings of routes matching each glob. */
+  routes?: Record<string, BudgetLimits>;
+  /** Limits per issue code, e.g. `{ HP1004: 3 }`. */
+  codes?: Record<string, number>;
+}
+
 export interface CiConfig {
   /** Lowest severity that makes the run fail. Default `"error"`. */
   failOn?: Severity | 'never';
   /** Fail when more warnings than this are found. */
   maxWarnings?: number;
-  /** Baseline file of accepted issues. */
+  /** Baseline file of accepted issues. Default `.hydration-proof/baseline.json`. */
   baseline?: string;
   /** Only fail on issues that are not in the baseline. */
   newIssuesOnly?: boolean;
+  /**
+   * Hydration error budget: how many findings of a severity (in total, per
+   * route glob or per code) are allowed before the run fails.
+   */
+  budget?: BudgetConfig;
+  /** Append a line per run to a history file for trends: `true` for `.hydration-proof/history.ndjson`, or a path. */
+  history?: boolean | string;
+}
+
+export interface OwnersConfig {
+  /** Route glob → owners, e.g. `{ '/checkout/**': ['@acme/payments'] }`. */
+  routes?: Record<string, string | string[]>;
+  /** Owners of source files from CODEOWNERS: `true` (default) looks in .github/, docs/ and the repository root; or a path. */
+  codeowners?: boolean | string;
+}
+
+export interface RedactConfig {
+  /** Remove emails, tokens, card numbers and secret URL parameters. Default true. */
+  builtIn?: boolean;
+  /** More text to remove from reports. */
+  patterns?: RegExp[];
+  /** Elements to black out in screenshots. */
+  selectors?: string[];
+}
+
+export interface ProjectConfig {
+  /** Folder of the project (with its own hydration-proof config). */
+  path: string;
+  /** Name shown in reports. Default: the folder name. */
+  name?: string;
+  /** Config file inside the folder. Default: found automatically. */
+  config?: string;
 }
 
 export interface BrowserConfig {
@@ -249,6 +401,24 @@ export interface HydrationProofConfig {
   hooks?: HooksConfig;
   /** Cache discovered routes between runs (keyed by build). Default true. */
   cache?: boolean;
+  /** Test every scenario in combinations of environments. */
+  matrix?: MatrixConfig;
+  /**
+   * Prove causes: pages with value mismatches are loaded again with one thing
+   * changed (clock, random seed, locale, timezone, theme, viewport, storage).
+   * Default false.
+   */
+  probes?: boolean | ProbesConfig;
+  /** Load every page this many times and report flaky issues. Default 1. */
+  repeat?: number;
+  /** Custom interactions to run on routes (before or after hydration). */
+  interactions?: InteractionConfig[];
+  /** Who owns findings: route owners and CODEOWNERS. */
+  owners?: OwnersConfig;
+  /** Remove secrets and personal data from reports. Default true. */
+  redact?: boolean | RedactConfig;
+  /** Monorepo: test these projects (each has its own config) in one run. */
+  projects?: (string | ProjectConfig)[];
 }
 
 /** Identity helper that gives `hydration-proof.config.ts` type checking and completion. */

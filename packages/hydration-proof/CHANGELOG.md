@@ -1,5 +1,38 @@
 # hydration-proof
 
+## 0.6.0
+
+### Minor Changes
+
+- Streaming, navigation and interaction checks.
+  
+  - **Suspense and streaming**: every boundary that hydrates later is compared on its own, so a mismatch inside one streamed boundary is reported for that boundary only.
+  - **Document checks**: `<head>` values that hydration adds or changes (HP1014; React 19 adds a second `<title>` or `<meta>` instead of fixing the server one), duplicate ids (HP3003), and useId collisions between React roots without an `identifierPrefix` (HP3004, new).
+  - **Events handled twice** (HP5006, new): an element with a React handler that a script listener or an inline `on*` attribute also handles.
+  - **Navigation checks** (`checks.navigation`, `--navigation`): each route is reached with the app's router (Next.js App Router and Pages Router), with and without prefetch, and compared with loading it directly. Content that differs (HP5004, new) and navigations that throw, fail their RSC request or never finish (HP5005, new) are reported. Parallel and intercepting routes are recognized, and their expected differences are reported as info. Routes can set `navigateFrom`.
+  - **Interaction checks** (`checks.interactions`, `--interactions`): the page's scripts are held back while the tool types, checks a box, selects text, scrolls and clicks. Lost input (HP5002), lost focus or selection (HP5003), scroll jumps (HP5007, new) and clicks that did nothing (HP5001, now a warning) are reported.
+  - **Custom interactions** (`interactions`): Playwright steps per route, before or after hydration; failures and page errors are reported as HP5008 (new).
+  - **Server Action form state**: mismatches inside forms the server rendered with `useActionState` results (`<!--F!-->`) get their own cause.
+  - **Timeline**: script loads and RSC requests, and the steps of navigation checks.
+  - The package size budget is now 600 KB unpacked / 150 KB gzipped (the Node code ships unminified for readable stack traces).
+
+## 0.5.0
+
+No changes in this release.
+
+## 0.4.0
+
+### Minor Changes
+
+- Find problems that only happen in some environments, and prove what causes them.
+  
+  - **Environment matrix** (`matrix`): test every scenario in combinations of locales, timezones, color schemes, reduced motion, viewports, browsers (Chromium, Firefox and WebKit in one run), network speeds, CPU slowdown, cold and warm cache, and custom axes such as feature flags, tenants or currencies. Pairwise selection (default) covers every pair of values with a small number of runs; `full` and `sample` strategies and a `max` limit keep the matrix under control, and combinations a browser cannot run are skipped with a note. `--no-matrix` turns it off for quick runs.
+  - **"Only in ..." labels**: when a finding appears in some environments and not others, the report names the values that separate them ("Only found with locale de-DE", "Only found with the production build").
+  - **Probes** (`probes`, `--probe`): pages with value mismatches are loaded again with the browser clock and random values fixed, then with exactly one thing changed (clock, random seed, locale, timezone, theme, viewport, storage). Causes confirmed this way are marked as proven; values that change between identical reloads are attributed to server data.
+  - **Repeat runs** (`repeat`, `--repeat n`): findings that appear in only some runs are marked flaky, and each page gets a flakiness score.
+  - **Scenario options**: `browser`, `network`, `cpu`, `cache`, `query`, and the diagnostic `clock` and `randomSeed` (the server keeps its real clock, so unstable values are still found).
+  - The HTML report shows the environment of each page, the other environments of the same route, probe results and flaky findings.
+
 ## 0.3.0
 
 ### Minor Changes

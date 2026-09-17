@@ -112,6 +112,14 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .badge.info { background: var(--info-bg); color: var(--info); }
 .issue-title { font-weight: 600; }
 .cause { font-size: 12px; background: var(--panel-2); border-radius: 999px; padding: 2px 10px; }
+.cause.proven { background: var(--ok-bg); color: var(--ok); }
+.cause.flaky { background: var(--warning-bg); color: var(--warning); }
+table.probes { border-collapse: collapse; width: 100%; margin: 6px 0 10px; font-size: 13px; }
+table.probes th, table.probes td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.probes th { color: var(--muted); font-weight: 600; font-size: 12px; }
+table.probes tr.changes td:nth-child(2) { color: var(--ok); font-weight: 600; }
+table.probes tr.current { background: var(--panel-2); }
+button.link { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; text-decoration: underline; }
 .where { color: var(--muted); font-size: 13px; width: 100%; }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 10px 0; }
 .kv dt { color: var(--muted); }

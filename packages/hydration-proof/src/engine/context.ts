@@ -1,7 +1,9 @@
 import type { Browser, BrowserContext, BrowserContextOptions, Route } from 'playwright-core';
-import type { MockConfig } from '../config/types.ts';
+import type { ResolvedNetwork } from '../config/resolve.ts';
+import type { BrowserName, CacheState, MockConfig } from '../config/types.ts';
 import type { RuntimeOptions } from '../shared/protocol.ts';
 import { runtimeScript } from './runtime-loader.ts';
+import { seededRandomScript } from './throttle.ts';
 
 /** Everything that describes one browser environment a route is tested in. */
 export interface ScenarioSpec {
@@ -19,6 +21,17 @@ export interface ScenarioSpec {
   cookieUrl?: string;
   /** Browser request fixtures. */
   mocks?: MockConfig[];
+  /** Browser to use. Default: the run's browser. */
+  browser?: BrowserName;
+  network?: ResolvedNetwork;
+  /** CPU slowdown factor (Chromium only). */
+  cpu?: number;
+  /** `warm`: the page is loaded once in the same context before it is tested. */
+  cache?: CacheState;
+  /** Fixed browser time (epoch ms). */
+  clock?: number;
+  /** Seed for Math.random and crypto randomness in the browser. */
+  randomSeed?: number;
 }
 
 function mockHandler(mock: MockConfig): (route: Route) => Promise<void> {
@@ -54,9 +67,14 @@ export async function createScenarioContext(
   scenario: ScenarioSpec,
   runtime: Partial<RuntimeOptions> = {},
 ): Promise<BrowserContext> {
-  const context = await browser.newContext({ serviceWorkers: 'block', ...scenario.context });
+  const options: BrowserContextOptions = { serviceWorkers: 'block', ...scenario.context };
+  // Firefox has no mobile emulation; the viewport and touch still apply.
+  if (options.isMobile !== undefined && browser.browserType().name() === 'firefox') delete options.isMobile;
+  const context = await browser.newContext(options);
   // Order matters: the runtime must run before anything the page or scenario adds.
   await context.addInitScript({ content: runtimeScript(runtime) });
+  if (scenario.clock !== undefined) await context.clock.setFixedTime(scenario.clock);
+  if (scenario.randomSeed !== undefined) await context.addInitScript({ content: seededRandomScript(scenario.randomSeed) });
   if (scenario.localStorage) await context.addInitScript({ content: storageScript('localStorage', scenario.localStorage) });
   if (scenario.sessionStorage) {
     await context.addInitScript({ content: storageScript('sessionStorage', scenario.sessionStorage) });

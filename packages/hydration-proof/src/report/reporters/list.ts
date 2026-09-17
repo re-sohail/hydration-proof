@@ -1,9 +1,17 @@
 import { relative } from 'node:path';
 import type { Issue, PageResult } from '../model.ts';
 import { formatDuration, palette, symbols, type Palette } from '../../cli/style.ts';
+import { describeSplit } from '../../matrix/classify.ts';
 import type { Reporter } from './types.ts';
 
 const MAX_ISSUES_PER_PAGE = 3;
+const MAX_END_LINES = 10;
+
+function causeText(issue: Issue): string {
+  if (!issue.cause) return '';
+  const certainty = issue.cause.proven ? 'proven' : `${Math.round(issue.cause.confidence * 100)}%`;
+  return `${issue.cause.title.toLowerCase()}, ${certainty}`;
+}
 
 function pageLabel(page: PageResult, multipleScenarios: boolean): string {
   const path = new URL(page.url).pathname + new URL(page.url).search;
@@ -19,8 +27,9 @@ function quote(value: string | null | undefined): string {
 
 function issueLines(issue: Issue, c: Palette): string[] {
   const color = issue.severity === 'error' ? c.red : issue.severity === 'warning' ? c.yellow : c.cyan;
-  const cause = issue.cause ? c.gray(`  (${issue.cause.title.toLowerCase()}, ${Math.round(issue.cause.confidence * 100)}%)`) : '';
-  const lines = [`    ${color(issue.code)} ${issue.title}${cause}`];
+  const cause = issue.cause ? c.gray(`  (${causeText(issue)})`) : '';
+  const flaky = issue.flaky && issue.occurrences ? c.yellow(`  flaky ${issue.occurrences.seen}/${issue.occurrences.runs}`) : '';
+  const lines = [`    ${color(issue.code)} ${issue.title}${cause}${flaky}`];
   const where = [issue.selector, issue.component ? `in ${issue.component}` : undefined].filter(Boolean).join('  ');
   if (where) lines.push(`      ${c.gray(where)}`);
   if (issue.server !== undefined || issue.client !== undefined) {
@@ -53,6 +62,7 @@ export function listReporter(stream: NodeJS.WriteStream = process.stdout): Repor
       if (page.counts.error) counts.push(c.red(`${page.counts.error} error${page.counts.error === 1 ? '' : 's'}`));
       if (page.counts.warning) counts.push(c.yellow(`${page.counts.warning} warning${page.counts.warning === 1 ? '' : 's'}`));
       if (page.status === 'error') counts.push(c.red(page.outcome));
+      if (page.flakiness) counts.push(c.yellow(`flaky ${Math.round(page.flakiness * 100)}%`));
       context.write(`  ${icon} ${pageLabel(page, multipleScenarios)} ${c.gray(formatDuration(page.timings.total))}${counts.length ? `  ${counts.join(', ')}` : ''}\n`);
       if (page.status === 'failed' || page.status === 'error' || page.status === 'warning') {
         const shown = active.filter((issue) => issue.severity !== 'info');
@@ -71,7 +81,40 @@ export function listReporter(stream: NodeJS.WriteStream = process.stdout): Repor
         ['Failed', s.failed + s.errored ? c.red(String(s.failed + s.errored)) : '0'],
       ];
       if (s.ignored) rows.push(['Ignored issues', c.gray(String(s.ignored))]);
+      if (s.flaky) rows.push(['Flaky findings', c.yellow(String(s.flaky))]);
       rows.push(['Duration', formatDuration(Date.now() - started)]);
+      const unique = (issues: Issue[]): Issue[] => {
+        const seen = new Set<string>();
+        return issues.filter((issue) => !seen.has(issue.fingerprint) && seen.add(issue.fingerprint));
+      };
+      const active = report.issues.filter((issue) => !issue.ignored);
+      const split = unique(active.filter((issue) => issue.onlyIn?.length));
+      if (split.length > 0) {
+        context.write(`\n  ${c.bold('Only in some environments')}\n`);
+        for (const issue of split.slice(0, MAX_END_LINES)) {
+          context.write(`    ${issue.code} ${issue.route.pattern} ${c.gray(issue.selector ?? '')}  ${describeSplit(issue.onlyIn!)}\n`);
+        }
+        if (split.length > MAX_END_LINES) context.write(`    ${c.gray(`… and ${split.length - MAX_END_LINES} more`)}\n`);
+      }
+      // Interaction and navigation checks run after the pages were listed.
+      const late = active.filter((issue) => issue.code.startsWith('HP5'));
+      if (late.length > 0) {
+        context.write(`\n  ${c.bold('Interaction and navigation checks')}\n`);
+        for (const issue of late.slice(0, MAX_END_LINES)) {
+          const page = pageLabel({ url: issue.route.url, scenario: issue.scenario, ...(issue.mode ? { mode: issue.mode } : {}) } as PageResult, multipleScenarios);
+          context.write(`${issueLines(issue, c).join('\n').replace(/^ {4}/, `    ${page}  `)}\n`);
+        }
+        if (late.length > MAX_END_LINES) context.write(`    ${c.gray(`… and ${late.length - MAX_END_LINES} more`)}\n`);
+      }
+      const probed = active.filter((issue) => issue.probes?.length);
+      if (probed.length > 0) {
+        context.write(`\n  ${c.bold('Probes')}\n`);
+        for (const issue of probed.slice(0, MAX_END_LINES)) {
+          const verdict = issue.cause?.proven ? c.green(`proven: ${issue.cause.title.toLowerCase()}`) : c.gray(issue.cause ? `not proven (${causeText(issue)})` : 'no cause found');
+          context.write(`    ${issue.code} ${pageLabel({ url: issue.route.url, scenario: issue.scenario, ...(issue.mode ? { mode: issue.mode } : {}) } as PageResult, multipleScenarios)} ${c.gray(issue.selector ?? '')}  ${verdict}\n`);
+        }
+        if (probed.length > MAX_END_LINES) context.write(`    ${c.gray(`… and ${probed.length - MAX_END_LINES} more`)}\n`);
+      }
       const width = Math.max(...rows.map(([label]) => label.length)) + 1;
       context.write(`\n${rows.map(([label, value]) => `  ${`${label}:`.padEnd(width + 1)} ${value}`).join('\n')}\n`);
       for (const failure of context.failures) context.write(`\n  ${c.red(symbols.error)} ${failure}\n`);

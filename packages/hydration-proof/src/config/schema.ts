@@ -22,6 +22,7 @@ const route: Schema = s.object(
     expectStatus: s.array(s.number({ integer: true, minimum: 100, maximum: 599 })),
     scenarios: s.array(s.string()),
     ready,
+    navigateFrom: s.string({ description: 'Page the navigation check starts from.' }),
   },
   undefined,
   ['path'],
@@ -41,6 +42,30 @@ const cookie: Schema = s.object(
   ['name', 'value'],
 );
 
+const viewport: Schema = s.union([
+  s.object({ width: s.number({ integer: true, minimum: 1 }), height: s.number({ integer: true, minimum: 1 }) }, undefined, ['width', 'height']),
+  s.enum(['mobile', 'tablet', 'desktop']),
+]);
+
+const network: Schema = s.union([
+  s.enum(['fast', 'fast-3g', 'slow-3g']),
+  s.object(
+    {
+      name: s.string(),
+      downloadKbps: s.number({ minimum: 1 }),
+      uploadKbps: s.number({ minimum: 1 }),
+      latencyMs: s.number({ minimum: 0 }),
+    },
+    'Custom network throttling.',
+    ['downloadKbps', 'uploadKbps', 'latencyMs'],
+  ),
+]);
+
+const browserName: Schema = s.enum(['chromium', 'firefox', 'webkit']);
+const cpu: Schema = s.number({ minimum: 1, maximum: 20, description: 'CPU slowdown factor (Chromium only).' });
+const cacheState: Schema = s.enum(['cold', 'warm']);
+const probeFactor: Schema = s.enum(['time', 'random', 'locale', 'timezone', 'theme', 'viewport', 'storage']);
+
 const scenario: Schema = s.object(
   {
     name: s.string({ description: 'Scenario name shown in reports.' }),
@@ -48,10 +73,7 @@ const scenario: Schema = s.object(
     timezoneId: s.string(),
     colorScheme: s.enum(['light', 'dark', 'no-preference']),
     reducedMotion: s.enum(['reduce', 'no-preference']),
-    viewport: s.union([
-      s.object({ width: s.number({ integer: true, minimum: 1 }), height: s.number({ integer: true, minimum: 1 }) }, undefined, ['width', 'height']),
-      s.enum(['mobile', 'tablet', 'desktop']),
-    ]),
+    viewport,
     userAgent: s.string(),
     storageState: s.string({ description: 'Playwright storage state file.' }),
     cookies: s.array(cookie),
@@ -75,10 +97,55 @@ const scenario: Schema = s.object(
     ),
     include: s.array(s.string()),
     exclude: s.array(s.string()),
+    query: s.record(s.string()),
+    browser: browserName,
+    network,
+    cpu,
+    cache: cacheState,
+    clock: s.union([s.string(), s.number()]),
+    randomSeed: s.number({ integer: true }),
   },
   'A browser environment routes are tested in.',
   ['name'],
 );
+
+const variant: Schema = s.object(
+  {
+    cookies: s.array(cookie),
+    headers: s.record(s.string()),
+    localStorage: s.record(s.string()),
+    sessionStorage: s.record(s.string()),
+    initScripts: s.array(s.string()),
+    query: s.record(s.string()),
+  },
+  'Scenario settings for one value of a custom axis.',
+);
+
+const matrix: Schema = s.object(
+  {
+    locale: s.array(s.string()),
+    timezoneId: s.array(s.string()),
+    colorScheme: s.array(s.enum(['light', 'dark', 'no-preference'])),
+    reducedMotion: s.array(s.enum(['reduce', 'no-preference'])),
+    viewport: s.array(viewport),
+    browser: s.array(browserName),
+    network: s.array(network),
+    cpu: s.array(cpu),
+    cache: s.array(cacheState),
+    axes: s.record(s.record(variant), 'Custom axes: axis name → value name → scenario settings.'),
+    strategy: s.enum(['pairwise', 'full', 'sample']),
+    max: s.number({ integer: true, minimum: 1, maximum: 1000 }),
+    seed: s.number({ integer: true }),
+    scenarios: s.array(s.string()),
+  },
+  'Test scenarios in combinations of environments.',
+);
+
+const limitFields = {
+  error: s.number({ integer: true, minimum: 0 }),
+  warning: s.number({ integer: true, minimum: 0 }),
+  info: s.number({ integer: true, minimum: 0 }),
+};
 
 const ignoreRule: Schema = s.object(
   {
@@ -129,7 +196,7 @@ export const configSchema: Schema = s.object(
     scenarios: s.array(scenario),
     ready,
     browser: s.object({
-      name: s.enum(['chromium', 'firefox', 'webkit']),
+      name: browserName,
       channel: s.string(),
       headless: s.boolean(),
     }),
@@ -142,7 +209,29 @@ export const configSchema: Schema = s.object(
       invalidHtml: s.boolean(),
       externalChanges: s.boolean(),
       suppressedWarnings: s.enum(['off', 'info', 'strict']),
+      interactions: s.boolean('Type, click, focus and scroll while the page loads.'),
+      navigation: s.union([
+        s.boolean(),
+        s.object({
+          from: s.string({ description: 'Page to navigate from.' }),
+          prefetch: s.boolean(),
+          maxRoutes: s.number({ integer: true, minimum: 1 }),
+        }),
+      ]),
     }),
+    interactions: s.array(
+      s.object(
+        {
+          route: s.string({ description: 'Route glob.' }),
+          name: s.string(),
+          when: s.enum(['before-hydration', 'after-hydration']),
+          scenarios: s.array(s.string()),
+          steps: s.fn('async ({ page, baseUrl, url }) => { ... }'),
+        },
+        'A custom interaction.',
+        ['route', 'steps'],
+      ),
+    ),
     ignore: s.object({
       selectors: s.array(s.string()),
       attributes: s.array(s.union([s.string(), s.regexp()])),
@@ -154,12 +243,41 @@ export const configSchema: Schema = s.object(
     screenshots: s.enum(['failures', 'all', 'off']),
     hooks: s.object({ setup: s.fn(), teardown: s.fn() }),
     cache: s.boolean(),
+    matrix,
+    probes: s.union([
+      s.boolean(),
+      s.object({ factors: s.array(probeFactor), maxPages: s.number({ integer: true, minimum: 1, maximum: 100 }) }),
+    ]),
+    repeat: s.number({ integer: true, minimum: 1, maximum: 100 }),
     ci: s.object({
       failOn: s.enum(['error', 'warning', 'info', 'never']),
       maxWarnings: s.number({ integer: true, minimum: 0 }),
       baseline: s.string(),
       newIssuesOnly: s.boolean(),
+      budget: s.object(
+        {
+          ...limitFields,
+          routes: s.record(s.object(limitFields)),
+          codes: s.record(s.number({ integer: true, minimum: 0 })),
+        },
+        'How many findings are allowed before the run fails.',
+      ),
+      history: s.union([s.boolean(), s.string()]),
     }),
+    owners: s.object({
+      routes: s.record(s.union([s.string(), s.array(s.string())])),
+      codeowners: s.union([s.boolean(), s.string()]),
+    }),
+    redact: s.union([
+      s.boolean(),
+      s.object({ builtIn: s.boolean(), patterns: s.array(s.regexp()), selectors: s.array(s.string()) }),
+    ]),
+    projects: s.array(
+      s.union([
+        s.string(),
+        s.object({ path: s.string(), name: s.string(), config: s.string() }, undefined, ['path']),
+      ]),
+    ),
   },
   'hydration-proof configuration',
 );

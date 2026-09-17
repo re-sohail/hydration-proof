@@ -11,4 +11,8 @@ export function boot(React: ReactLike, ReactDOMClient: any): void {
   const element = React.createElement(page.App);
   if (page.clientOnly) ReactDOMClient.createRoot(container).render(element);
   else ReactDOMClient.hydrateRoot(container, element);
+  const second = document.getElementById('root2');
+  if (page.second && second) {
+    ReactDOMClient.hydrateRoot(second, React.createElement(page.second), page.secondPrefix ? { identifierPrefix: page.secondPrefix } : {});
+  }
 }

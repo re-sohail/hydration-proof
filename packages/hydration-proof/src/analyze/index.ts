@@ -8,6 +8,7 @@ import { docsUrl, issueDefinition, type Severity } from '../issues/registry.ts';
 import { suggestionsFor } from '../issues/suggestions.ts';
 import type { Issue, PageStatus, ReactInfo, RouteRef, TimelineEntry } from '../report/model.ts';
 import type { Draft } from './draft.ts';
+import { analyzeDuplicateIds, analyzeHead } from './document.ts';
 import { analyzeErrors, isWarningKind, standaloneDraft, type ReactReport } from './errors.ts';
 import { analyzeExternal } from './external.ts';
 import { analyzeHydration } from './hydration.ts';
@@ -183,6 +184,15 @@ function toIssue(draft: Draft, options: AnalyzeOptions, production: boolean): Is
   return issue;
 }
 
+/** Issues from findings made outside the page analysis (interaction and navigation checks). */
+export function issuesFromDrafts(drafts: readonly Draft[], options: Pick<AnalyzeOptions, 'route' | 'scenario'>, production = false): Issue[] {
+  return dedupe(drafts.map((draft) => {
+    const issue = toIssue(draft, options, production);
+    delete issue.sourceUnavailableReason;
+    return issue;
+  }));
+}
+
 function dedupe(issues: Issue[]): Issue[] {
   const byFingerprint = new Map<string, Issue>();
   for (const issue of issues) {
@@ -275,6 +285,14 @@ export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undef
     }
   }
 
+  const firstEvent = hydration.events[0];
+  const postEffect = runtime.snapshots.find((entry) => entry.seq === capture.postEffectSnapshot);
+  if (firstEvent && postEffect) drafts.push(...analyzeHead(firstEvent.preTree, postEffect.tree, normalize));
+  const finalSnapshot = runtime.snapshots.find((entry) => entry.seq === capture.stableSnapshot) ?? postEffect;
+  if (finalSnapshot && runtime.roots.some((root) => !root.tooling)) {
+    drafts.push(...analyzeDuplicateIds(finalSnapshot.tree, runtime.roots, normalize));
+  }
+
   const merged = merge(drafts, errorAnalysis.reports, runtime.commits);
   const production = appRenderer(capture)?.bundleType === 0;
   const nodes = new Map<string, number>();
@@ -301,7 +319,7 @@ export function analyzePage(capture: PageCapture, parsed: ParsedDocument | undef
   const issues = dedupe(converted).sort(
     (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.code.localeCompare(b.code),
   );
-  const analysis: PageAnalysis = { issues, status: pageStatus(capture, issues), nodes, timeline: buildTimeline(runtime) };
+  const analysis: PageAnalysis = { issues, status: pageStatus(capture, issues), nodes, timeline: buildTimeline(runtime, capture.network, capture.timeOrigin) };
   const react = reactInfo(capture);
   if (react) analysis.react = react;
   return analysis;

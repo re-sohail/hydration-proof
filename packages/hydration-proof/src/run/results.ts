@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ExpiredRule } from '../analyze/ignore.ts';
+import type { ExpiredEntry } from '../ci/baseline.ts';
+import { matchesAny, pathOf } from '../routes/pattern.ts';
 import type { Adapter } from '../adapters/index.ts';
 import type { ResolvedConfig } from '../config/resolve.ts';
 import type { BuildMode } from '../config/types.ts';
@@ -104,26 +106,6 @@ export function toPageResult(run: PageRun, issues: Issue[], route: PlannedRoute 
   return page;
 }
 
-/** With --mode both: note issues that appear in only one build. */
-export function compareModes(issues: Issue[]): void {
-  const modes = new Map<string, Set<string>>();
-  for (const issue of issues) {
-    if (!issue.mode) continue;
-    const key = `${issue.fingerprint}|${issue.scenario}`;
-    const set = modes.get(key) ?? new Set<string>();
-    set.add(issue.mode);
-    modes.set(key, set);
-  }
-  for (const issue of issues) {
-    const set = issue.mode ? modes.get(`${issue.fingerprint}|${issue.scenario}`) : undefined;
-    if (!set || set.size !== 1) continue;
-    issue.evidence.push({
-      kind: 'note',
-      message: issue.mode === 'production' ? 'Only found in the production build.' : 'Only found in development (React development builds check more).',
-    });
-  }
-}
-
 export function summarize(pages: PageResult[], issues: Issue[]): Summary {
   const summary: Summary = {
     pages: pages.length,
@@ -135,25 +117,65 @@ export function summarize(pages: PageResult[], issues: Issue[]): Summary {
     issues: { error: 0, warning: 0, info: 0 },
     ignored: 0,
   };
+  let flaky = 0;
   for (const issue of issues) {
     if (issue.ignored) summary.ignored++;
     else summary.issues[issue.severity]++;
+    if (issue.flaky && !issue.ignored) flaky++;
+  }
+  if (pages.some((page) => page.runs !== undefined)) summary.flaky = flaky;
+  if (issues.some((issue) => issue.new || issue.baseline)) {
+    summary.new = issues.filter((issue) => issue.new).length;
+    summary.known = issues.filter((issue) => issue.baseline).length;
   }
   return summary;
 }
 
-export function policy(config: ResolvedConfig, report: Report, expired: ExpiredRule[]): string[] {
+function countBySeverity(issues: readonly Issue[]): Record<Severity, number> {
+  const counts: Record<Severity, number> = { error: 0, warning: 0, info: 0 };
+  for (const issue of issues) counts[issue.severity]++;
+  return counts;
+}
+
+const SEVERITIES: readonly Severity[] = ['error', 'warning', 'info'];
+const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+export function policy(config: ResolvedConfig, report: Report, expired: ExpiredRule[], expiredBaseline: readonly ExpiredEntry[] = []): string[] {
   const failures: string[] = [];
-  const { failOn, maxWarnings } = config.ci;
+  const { failOn, maxWarnings, budget } = config.ci;
   const active = report.issues.filter((issue) => !issue.ignored);
+  const totals = countBySeverity(active);
+
+  // A budget for a severity replaces the "any finding fails" rule for it.
   if (failOn !== 'never') {
-    const failing = active.filter((issue) => RANK[issue.severity] >= RANK[failOn]);
+    const failing = active.filter((issue) => RANK[issue.severity] >= RANK[failOn] && budget?.[issue.severity] === undefined);
     if (failing.length > 0) {
-      failures.push(`${failing.length} issue${failing.length === 1 ? '' : 's'} at or above "${failOn}" severity.`);
+      const scope = config.ci.newIssuesOnly ? 'new issue' : 'issue';
+      failures.push(`${plural(failing.length, scope)} at or above "${failOn}" severity.`);
     }
   }
-  if (maxWarnings !== undefined && report.summary.issues.warning > maxWarnings) {
-    failures.push(`${report.summary.issues.warning} warnings exceed ci.maxWarnings (${maxWarnings}).`);
+  for (const severity of SEVERITIES) {
+    const limit = budget?.[severity];
+    if (limit !== undefined && totals[severity] > limit) {
+      failures.push(`${plural(totals[severity], severity)} exceed the budget of ${limit}.`);
+    }
+  }
+  for (const [glob, limits] of Object.entries(budget?.routes ?? {})) {
+    const matching = active.filter((issue) => matchesAny(pathOf(new URL(issue.route.url).pathname), [glob]) || matchesAny(issue.route.pattern, [glob]));
+    const counts = countBySeverity(matching);
+    for (const severity of SEVERITIES) {
+      const limit = limits[severity];
+      if (limit !== undefined && counts[severity] > limit) {
+        failures.push(`${plural(counts[severity], severity)} on routes ${glob} exceed the budget of ${limit}.`);
+      }
+    }
+  }
+  for (const [code, limit] of Object.entries(budget?.codes ?? {})) {
+    const count = active.filter((issue) => issue.code === code).length;
+    if (count > limit) failures.push(`${plural(count, `${code} finding`)} exceed the budget of ${limit}.`);
+  }
+  if (maxWarnings !== undefined && totals.warning > maxWarnings) {
+    failures.push(`${totals.warning} warnings exceed ci.maxWarnings (${maxWarnings}).`);
   }
   const seen = new Set<string>();
   for (const { rule } of expired) {
@@ -161,6 +183,9 @@ export function policy(config: ResolvedConfig, report: Report, expired: ExpiredR
     if (seen.has(key)) continue;
     seen.add(key);
     failures.push(`Ignore rule "${rule.reason}" expired on ${rule.expires}.`);
+  }
+  for (const { entry } of expiredBaseline) {
+    failures.push(`The baseline entry for ${entry.code} on ${entry.route}${entry.selector ? ` (${entry.selector})` : ''} expired on ${entry.expires}.`);
   }
   return failures;
 }

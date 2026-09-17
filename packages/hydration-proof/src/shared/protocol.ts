@@ -58,6 +58,8 @@ export interface ClientView {
   htmlMatch?: boolean;
   /** Why the element is not audited at all. */
   opaque?: string;
+  /** Events React handles here that a script listener or an inline on* attribute also handles. */
+  handlers?: string[];
 }
 
 export interface SElement {
@@ -350,6 +352,29 @@ export interface NodeRect {
   height: number;
 }
 
+/** Controls the interaction checks use (selectors). */
+export interface InteractionTargets {
+  input?: string;
+  checkbox?: string;
+  button?: string;
+  scrollable: boolean;
+}
+
+export interface InputState {
+  value?: string;
+  checked?: boolean;
+  focused: boolean;
+  selection?: [number, number];
+  scrollY: number;
+  /** The field remembered by `prepareInput` is no longer in the document. */
+  fieldReplaced?: boolean;
+}
+
+export interface PageObservation {
+  text: string;
+  url: string;
+}
+
 /** The object the runtime installs at `window[RUNTIME_GLOBAL]`. */
 export interface RuntimeApi {
   version: number;
@@ -361,4 +386,9 @@ export interface RuntimeApi {
   sources(ids: NodeId[]): NodeSource[];
   /** Document-relative boxes of live nodes (text nodes use their parent). */
   rects(ids: NodeId[]): NodeRect[];
+  /** Interaction checks (read-only helpers, plus focus, selection and scroll). */
+  interactionTargets(): InteractionTargets;
+  prepareInput(targets: InteractionTargets): void;
+  inputState(targets: InteractionTargets): InputState;
+  observe(): PageObservation;
 }

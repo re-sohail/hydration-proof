@@ -1,0 +1,81 @@
+{
+  "name": "eslint-plugin-hydration-proof",
+  "version": "0.6.0",
+  "description": "ESLint rules that stop React hydration mismatches before they ship: time, randomness, browser globals, storage, locale and timezone formatting, unstable ids, invalid HTML nesting and suppressHydrationWarning misuse in render code. Flat config, ESLint 9 and 10.",
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "eslint-plugin",
+    "hydration",
+    "hydration-error",
+    "hydration-mismatch",
+    "react-hydration",
+    "ssr",
+    "server-side-rendering",
+    "nextjs",
+    "next.js",
+    "react",
+    "react-19",
+    "react-server-components",
+    "suppresshydrationwarning",
+    "useid"
+  ],
+  "license": "MIT",
+  "author": "Sohail Khan (https://me.jscrate.dev)",
+  "homepage": "https://hydration.jscrate.dev/docs/eslint",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/re-sohail/hydration-proof.git",
+    "directory": "packages/eslint-plugin-hydration-proof"
+  },
+  "bugs": {
+    "url": "https://github.com/re-sohail/hydration-proof/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "build": "tsdown && node scripts/check-package.ts",
+    "build:fast": "tsdown",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.tools.json",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "lint:publint": "publint --strict",
+    "lint:attw": "attw --pack . --profile esm-only",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "eslint": "^9.0.0 || ^10.0.0"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@types/estree": "^1.0.9",
+    "@types/node": "^22.20.3",
+    "@typescript-eslint/parser": "^8.70.0",
+    "eslint": "^10.10.0",
+    "publint": "0.3.24",
+    "tsdown": "0.23.0",
+    "typescript": "6.0.3",
+    "vitest": "^5.0.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

@@ -1,0 +1,110 @@
+[
+  {
+    "description": "HP9004 The page could not be loaded on /broken (scenario guest, production build): net::ERR_CONNECTION_REFUSED at http://127.0.0.1:4173/broken",
+    "check_name": "HP9004",
+    "fingerprint": "70ba5fe615d8bb62d76160e78234992221ffb03ba418e9919cb1455cc8816491",
+    "severity": "critical",
+    "location": {
+      "path": "apps/web/hydration-proof.config.ts",
+      "lines": {
+        "begin": 1
+      }
+    }
+  },
+  {
+    "description": "HP1001 Text differs between server and client on /products/1?ref=a,b (scenario guest, production build): #price; server \"Price: 10%\\nnow\", client \"Price: 12%\\r\\nlater\"; likely cause: Time-dependent value (97% confidence)",
+    "check_name": "HP1001",
+    "fingerprint": "750f3d3a188389e621c94433d188caad540929cd235303c2afd9aeae57449d9e",
+    "severity": "critical",
+    "location": {
+      "path": "apps/web/src/app/products/[id]/page.tsx",
+      "lines": {
+        "begin": 12
+      }
+    }
+  },
+  {
+    "description": "HP1001 Text differs between server and client on /products/1?ref=a,b (scenario admin, production build): #price; server \"Price: 10%\\nnow\", client \"Price: 12%\\r\\nlater\"; likely cause: Time-dependent value (97% confidence)",
+    "check_name": "HP1001",
+    "fingerprint": "d492a349460826751416e8677ef2dcde0ec8c193f3f244eea53cf8654e9ef257",
+    "severity": "critical",
+    "location": {
+      "path": "apps/web/src/app/products/[id]/page.tsx",
+      "lines": {
+        "begin": 12
+      }
+    }
+  },
+  {
+    "description": "HP1001 Text differs between server and client on /products/1?ref=a,b (scenario guest, development build): #price; server \"Price: 10%\\nnow\", client \"Price: 12%\\r\\nlater\"; likely cause: Time-dependent value (97% confidence)",
+    "check_name": "HP1001",
+    "fingerprint": "1c34d2f21da9dce0c82a5c2197f5d507c2ac3180b28836ef51b2802397d801c4",
+    "severity": "critical",
+    "location": {
+      "path": "apps/web/src/app/products/[id]/page.tsx",
+      "lines": {
+        "begin": 12
+      }
+    }
+  },
+  {
+    "description": "HP1013 dangerouslySetInnerHTML differs between server and client on /nasty (scenario guest, production build): div[data-x=\"a|b\"] > p:nth-child(2); server \"100% ]]></failure><x a=\\\"1\\\" b='2'>&amp; | `tick` ``` a:b,c \\u0000\\u0007\\b\\u000b\\f\\u001b\\u007f\\u0085\\u009f 🎉 \\ud800 end\\r\\nnext\", client \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…\"",
+    "check_name": "HP1013",
+    "fingerprint": "693b2f4bf0eb8df317bafe18b3a6fdf57eb8bdd2be70a78358cda0c6c4a193c4",
+    "severity": "major",
+    "location": {
+      "path": "apps/web/src/app/nasty/page.tsx",
+      "lines": {
+        "begin": 40
+      }
+    }
+  },
+  {
+    "description": "HP1004 Class name differs between server and client on /products/1?ref=a,b (scenario guest, production build): main > button.btn [class]; server \"btn a:b,c\", client \"btn <x>\"; likely cause: CSS-in-JS class names differ (60% confidence)",
+    "check_name": "HP1004",
+    "fingerprint": "e1dc99c7f600854f9f5c436e95638ad5368f4d1fad8418a02e8c8ad7516e36e2",
+    "severity": "major",
+    "location": {
+      "path": "packages/ui/src/Button.tsx",
+      "lines": {
+        "begin": 3
+      }
+    }
+  },
+  {
+    "description": "HP9010 The route redirected somewhere else on /docs (scenario guest, production build): The route /docs ended on /login.",
+    "check_name": "HP9010",
+    "fingerprint": "606d9e689aeafb9864edd417fde1ce7eede40318dc0b73908b901a059efb2918",
+    "severity": "minor",
+    "location": {
+      "path": "apps/web/hydration-proof.config.ts",
+      "lines": {
+        "begin": 1
+      }
+    }
+  },
+  {
+    "description": "HP1005 Attribute only present in the server HTML on /products/1?ref=a,b (scenario guest, production build): input[name=\"q\"] [data-lastpass]; server \"on\", client (absent)",
+    "check_name": "HP1005",
+    "fingerprint": "ab58ac6630b5212bcc7a6df48b5178c6abe6d48ecdead0cf9591c3d03cbbc51d",
+    "severity": "minor",
+    "location": {
+      "path": "apps/web/hydration-proof.config.ts",
+      "lines": {
+        "begin": 1
+      }
+    }
+  },
+  {
+    "description": "HP3003 Duplicate id attribute on /nasty (scenario guest, production build): #main; Two elements use id=\"main\" 🎉.",
+    "check_name": "HP3003",
+    "fingerprint": "e74f19318dc051344358b249e6f93e26ecd4a3cb34f4cd1f1870e9a6c8541564",
+    "severity": "info",
+    "location": {
+      "path": "apps/web/hydration-proof.config.ts",
+      "lines": {
+        "begin": 1
+      }
+    }
+  }
+]

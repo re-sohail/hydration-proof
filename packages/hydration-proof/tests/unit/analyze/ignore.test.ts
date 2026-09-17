@@ -70,6 +70,7 @@ function capture(requestedUrl: string, finalUrl: string): PageCapture {
     pageErrors: [],
     consoleMessages: [],
     timings: { navigation: 0, total: 0 },
+    network: [],
   };
 }
 

@@ -36,6 +36,8 @@ import {
 } from './fiber.ts';
 import { installHook } from './hook.ts';
 import { idOf, nodeById } from './ids.ts';
+import { inputState, interactionTargets, observePage, prepareInput } from './interactions.ts';
+import { installListenerTracking } from './listeners.ts';
 import { MutationLog } from './observer.ts';
 import { cssPath, isToolingNode } from './selector.ts';
 import { serializeRoot, setIgnoreSelectors } from './serialize.ts';
@@ -236,6 +238,7 @@ export function startRuntime(options: RuntimeOptions): RuntimeApi {
 
   if (options.ignoreSelectors.length > 0) setIgnoreSelectors(options.ignoreSelectors);
   installErrorCapture(sink, options.captureWarnings);
+  if (options.captureClientView) installListenerTracking();
   installHook({ onInject, onCommit, onPostCommit });
   log.start();
 
@@ -312,6 +315,10 @@ export function startRuntime(options: RuntimeOptions): RuntimeApi {
       }
       return out;
     },
+    interactionTargets,
+    prepareInput,
+    inputState,
+    observe: observePage,
     rects(ids): NodeRect[] {
       const out: NodeRect[] = [];
       for (const id of ids) {

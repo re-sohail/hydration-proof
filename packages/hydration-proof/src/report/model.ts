@@ -49,12 +49,30 @@ export interface Cause {
   title: string;
   confidence: number;
   docsUrl?: string;
+  /** A probe run confirmed the cause (the value changed when only this factor changed). */
+  proven?: boolean;
+}
+
+export interface ProbeResult {
+  /** What the probe changed: time, random, locale, timezone, theme, viewport, storage, or `repeat` (an identical reload). */
+  factor: string;
+  /** `changes`: the finding changed with this factor; `stable`: it did not; `inconclusive`: the page changes between identical loads. */
+  result: 'changes' | 'stable' | 'inconclusive';
+  detail?: string;
+}
+
+/** An environment axis whose values separate the pages with and without the finding. */
+export interface EnvironmentSplit {
+  /** Axis: locale, timezone, colorScheme, reducedMotion, viewport, browser, network, cpu, cache, mode, or a custom axis. */
+  axis: string;
+  /** The values the finding was seen with. */
+  values: string[];
 }
 
 export interface TimelineEntry {
   /** Milliseconds since navigation start. */
   time: number;
-  kind: 'renderer' | 'commit' | 'error' | 'mutation' | 'stream' | 'effects' | 'snapshot';
+  kind: 'renderer' | 'commit' | 'error' | 'mutation' | 'stream' | 'effects' | 'snapshot' | 'network' | 'navigation' | 'interaction';
   label: string;
   detail?: string;
 }
@@ -103,6 +121,22 @@ export interface Issue {
   excerpt?: { server?: string; client?: string };
   /** Build mode the issue was found in (runs with --mode both). */
   mode?: 'production' | 'development';
+  /** With `repeat`: in how many of the page's runs the finding appeared. */
+  occurrences?: { seen: number; runs: number };
+  /** Seen in some runs of the page but not all. */
+  flaky?: boolean;
+  /** The finding only appears with these environment values (matrix or --mode both). */
+  onlyIn?: EnvironmentSplit[];
+  /** Results of the probe runs. */
+  probes?: ProbeResult[];
+  /** The finding is recorded in the baseline. */
+  baseline?: { firstSeen: string; reason?: string; expires?: string };
+  /** A baseline is in use and this finding is not in it. */
+  new?: boolean;
+  /** Teams or people responsible (route owners from the config, or CODEOWNERS of the source file). */
+  owners?: string[];
+  /** Monorepo project the finding belongs to. */
+  project?: string;
 }
 
 export type PageStatus = 'passed' | 'warning' | 'failed' | 'error';
@@ -134,6 +168,16 @@ export interface PageResult {
   serverLogs?: string[];
   /** How the route was found. */
   source?: 'config' | 'discovered' | 'manifest' | 'sitemap' | 'crawl' | 'not-found';
+  /** The configured scenario this environment was derived from (with a matrix). */
+  baseScenario?: string;
+  /** The environment the page was tested in: browser plus the matrix axis values. */
+  environment?: Record<string, string>;
+  /** With `repeat`: how many times the page was loaded. */
+  runs?: number;
+  /** With `repeat`: share of runs whose findings differ from the most common result (0 = consistent). */
+  flakiness?: number;
+  /** Monorepo project the page belongs to. */
+  project?: string;
 }
 
 export interface RunInfo {
@@ -148,6 +192,11 @@ export interface RunInfo {
   mode: string;
   baseUrl?: string;
   ci?: string;
+  /** Git commit and branch, when available. */
+  commit?: string;
+  branch?: string;
+  /** Shards merged into this report. */
+  shards?: string[];
 }
 
 export interface Summary {
@@ -159,6 +208,29 @@ export interface Summary {
   errored: number;
   issues: Record<Severity, number>;
   ignored: number;
+  /** Findings that appeared in only some runs of a page (with `repeat`). */
+  flaky?: number;
+  /** With a baseline: findings that are not in it. */
+  new?: number;
+  /** With a baseline: findings that are in it. */
+  known?: number;
+  /** Values removed from the report by redaction, by kind. */
+  redacted?: Record<string, number>;
+}
+
+/** One line of the history file (`ci.history`). */
+export interface HistoryEntry {
+  date: string;
+  commit?: string;
+  branch?: string;
+  durationMs: number;
+  pages: number;
+  failed: number;
+  issues: Record<Severity, number>;
+  /** Non-ignored findings per issue code. */
+  codes: Record<string, number>;
+  /** Fingerprints of the non-ignored findings. */
+  fingerprints: string[];
 }
 
 export interface Report {
@@ -168,4 +240,6 @@ export interface Report {
   summary: Summary;
   pages: PageResult[];
   issues: Issue[];
+  /** Earlier runs from the history file, oldest first (for trends). */
+  history?: HistoryEntry[];
 }

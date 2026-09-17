@@ -25,6 +25,7 @@ timezone, color scheme, viewport) and the stage where the difference started.
 | [`third-party-script`](#third-party-script) | A script changed the page before hydration |
 | [`cdn`](#cdn) | HTML rewritten by a CDN or proxy |
 | [`unstable-id`](#unstable-id) | Generated id differs |
+| [`form-state`](#form-state) | Server Action form state |
 | [`suppressed`](#suppressed) | Intentional difference (suppressHydrationWarning) |
 
 ## time
@@ -146,6 +147,14 @@ Online: https://hydration.jscrate.dev/docs/causes/cdn
 - Use React's useId instead of counters or random ids, and use the same identifierPrefix on server and client.
 
 Online: https://hydration.jscrate.dev/docs/causes/unstable-id
+
+## form-state
+
+**Server Action form state**
+
+- The server rendered this form with the result of a submitted Server Action (useActionState with a permalink), but the client hydrated without that state. Let the framework pass the form state to hydrateRoot (Next.js does this), and render the form from the action state only.
+
+Online: https://hydration.jscrate.dev/docs/causes/form-state
 
 ## suppressed
 

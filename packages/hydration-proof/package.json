@@ -1,6 +1,6 @@
 {
   "name": "hydration-proof",
-  "version": "0.3.0",
+  "version": "0.6.0",
   "description": "Find, explain, reproduce and prevent React hydration mismatches before users see them. Compares real server HTML with the hydrated DOM in CI. Next.js, React 18 and 19. Adds nothing to your production bundle.",
   "keywords": [
     "hydration",

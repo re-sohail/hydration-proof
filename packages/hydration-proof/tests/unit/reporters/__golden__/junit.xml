@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="hydration-proof" tests="7" failures="4" errors="1" skipped="0" time="12.345" timestamp="2026-09-17T10:00:00">
+  <testsuite name="guest (production)" tests="5" failures="2" errors="1" skipped="0" time="9.514" timestamp="2026-09-17T10:00:00">
+    <properties>
+      <property name="scenario" value="guest"/>
+      <property name="mode" value="production"/>
+    </properties>
+    <testcase classname="hydration-proof.guest.production" name="/" time="0.812"/>
+    <testcase classname="hydration-proof.guest.production" name="/products/1?ref=a,b" time="1.234">
+      <failure message="2 hydration errors: HP1001 Text differs between server and client; HP1004 Class name differs between server and client" type="HP1001">Errors:
+
+HP1001 Text differs between server and client [error, 95% confidence]
+  Element: #price
+  Server: "Price: 10%\nnow"
+  Client: "Price: 12%\r\nlater"
+  Component: Price
+  Likely cause: Time-dependent value (97% confidence)
+  Source: src/app/products/[id]/page.tsx:12:7
+  Fix: Move time-dependent values into useEffect.
+  Docs: https://hydration.jscrate.dev/docs/issues/hp1001
+
+HP1004 Class name differs between server and client [error, 70% confidence]
+  Element: main &gt; button.btn (attribute class)
+  Server: "btn a:b,c"
+  Client: "btn &lt;x&gt;"
+  Likely cause: CSS-in-JS class names differ (60% confidence)
+  Source: ../../packages/ui/src/Button.tsx:3
+  Docs: https://hydration.jscrate.dev/docs/issues/hp1004</failure>
+      <system-out>URL: http://127.0.0.1:4173/products/1?ref=a,b
+Outcome: hydrated, HTTP 200
+
+Other issues:
+
+HP1005 Attribute only present in the server HTML [warning, 60% confidence]
+  Element: input[name="q"] (attribute data-lastpass)
+  Server: "on"
+  Client: (absent)
+  Source: not found (The scripts have no source maps.)
+  Docs: https://hydration.jscrate.dev/docs/issues/hp1005</system-out>
+    </testcase>
+    <testcase classname="hydration-proof.guest.production" name="/docs" time="1.234">
+      <system-out>URL: http://127.0.0.1:4173/docs
+Final URL: http://127.0.0.1:4173/login
+Outcome: hydrated, HTTP 200
+
+Warnings:
+
+HP9010 The route redirected somewhere else [warning, 90% confidence]
+  The route /docs ended on /login.
+  Docs: https://hydration.jscrate.dev/docs/issues/hp9010</system-out>
+    </testcase>
+    <testcase classname="hydration-proof.guest.production" name="/nasty" time="1.234">
+      <failure message="1 hydration error: HP1013 dangerouslySetInnerHTML differs between server and client" type="HP1013">Errors:
+
+HP1013 dangerouslySetInnerHTML differs between server and client [error, 85% confidence]
+  Element: div[data-x="a|b"] &gt; p:nth-child(2)
+  Server: "100% ]]&gt;&lt;/failure&gt;&lt;x a=\"1\" b='2'&gt;&amp;amp; | `tick` ``` a:b,c \u0000\u0007\b\u000b\f\u001b\u007f\u0085\u009f 🎉 \ud800 end\r\nnext"
+  Client: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx````yyyyyyyyyy"
+  Source: src/app/nasty/page.tsx:40
+  Fix: Sanitize &lt;html&gt; &amp; use `useEffect` | done.
+  Docs: https://hydration.jscrate.dev/docs/issues/hp1013</failure>
+      <system-out>URL: http://127.0.0.1:4173/nasty
+Outcome: hydrated, HTTP 200
+
+Other issues:
+
+HP3003 Duplicate id attribute [info, 50% confidence]
+  Element: #main
+  Two elements use id="main" 🎉.
+  Docs: https://hydration.jscrate.dev/docs/issues/hp3003
+
+Ignored issues:
+
+HP1002 Attribute differs between server and client [error, 80% confidence]
+  Element: body (attribute data-analytics)
+  Server: "1"
+  Client: "2"
+  Docs: https://hydration.jscrate.dev/docs/issues/hp1002
+  Ignored: Known analytics attribute (code HP1002 on /nasty)</system-out>
+      <system-err>Server log:
+Error: &lt;boom&gt; &amp; failed
+bad  bytes</system-err>
+    </testcase>
+    <testcase classname="hydration-proof.guest.production" name="/broken" time="5.000">
+      <error message="navigation-failed: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:4173/broken" type="navigation-failed">URL: http://127.0.0.1:4173/broken
+Outcome: navigation-failed
+
+Issues:
+
+HP9004 The page could not be loaded [error, 100% confidence]
+  net::ERR_CONNECTION_REFUSED at http://127.0.0.1:4173/broken
+  Docs: https://hydration.jscrate.dev/docs/issues/hp9004</error>
+    </testcase>
+  </testsuite>
+  <testsuite name="admin (production)" tests="1" failures="1" errors="0" skipped="0" time="1.234" timestamp="2026-09-17T10:00:00">
+    <properties>
+      <property name="scenario" value="admin"/>
+      <property name="mode" value="production"/>
+    </properties>
+    <testcase classname="hydration-proof.admin.production" name="/products/1?ref=a,b" time="1.234">
+      <failure message="1 hydration error: HP1001 Text differs between server and client" type="HP1001">Errors:
+
+HP1001 Text differs between server and client [error, 95% confidence]
+  Element: #price
+  Server: "Price: 10%\nnow"
+  Client: "Price: 12%\r\nlater"
+  Component: Price
+  Likely cause: Time-dependent value (97% confidence)
+  Source: src/app/products/[id]/page.tsx:12:7
+  Fix: Move time-dependent values into useEffect.
+  Docs: https://hydration.jscrate.dev/docs/issues/hp1001</failure>
+      <system-out>URL: http://127.0.0.1:4173/products/1?ref=a,b
+Outcome: hydrated, HTTP 200</system-out>
+    </testcase>
+  </testsuite>
+  <testsuite name="guest (development)" tests="1" failures="1" errors="0" skipped="0" time="1.234" timestamp="2026-09-17T10:00:00">
+    <properties>
+      <property name="scenario" value="guest"/>
+      <property name="mode" value="development"/>
+    </properties>
+    <testcase classname="hydration-proof.guest.development" name="/products/1?ref=a,b" time="1.234">
+      <failure message="1 hydration error: HP1001 Text differs between server and client" type="HP1001">Errors:
+
+HP1001 Text differs between server and client [error, 95% confidence]
+  Element: #price
+  Server: "Price: 10%\nnow"
+  Client: "Price: 12%\r\nlater"
+  Component: Price
+  Likely cause: Time-dependent value (97% confidence)
+  Source: src/app/products/[id]/page.tsx:12:7
+  Fix: Move time-dependent values into useEffect.
+  Docs: https://hydration.jscrate.dev/docs/issues/hp1001</failure>
+      <system-out>URL: http://127.0.0.1:4173/products/1?ref=a,b
+Outcome: hydrated, HTTP 200</system-out>
+    </testcase>
+  </testsuite>
+</testsuites>

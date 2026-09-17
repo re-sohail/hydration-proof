@@ -2,6 +2,7 @@ import { normalizeReactText, propsView } from '../shared/attr-map.ts';
 import type { ClientView, SElement, SText } from '../shared/protocol.ts';
 import { HTML_NS } from './env.ts';
 import { fiberOf, hostPropsOf, ownerName } from './fiber.ts';
+import { nativeHandlers, TRACKED_EVENTS } from './listeners.ts';
 import type { SerializeHooks } from './serialize.ts';
 
 // An inert document: markup parsed here never runs scripts or loads images.
@@ -53,6 +54,8 @@ export function clientViewOf(el: Element): ClientView | undefined {
     out.domStyle = styleFromAttribute(el.getAttribute('style') ?? '');
   }
   if (view.html !== undefined && !foreign) out.htmlMatch = sameMarkup(el, view.html);
+  const doubled = nativeHandlers(el).filter((type) => TRACKED_EVENTS.get(type)!.some((name) => typeof props[name] === 'function'));
+  if (doubled.length > 0) out.handlers = doubled;
   return out;
 }
 
