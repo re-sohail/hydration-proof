@@ -134,6 +134,10 @@ function inShard(plan: JobPlan, shard: { index: number; total: number } | undefi
   return digest.readUInt32BE(0) % shard.total === shard.index - 1;
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function fetchText(url: string): Promise<string | undefined> {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
@@ -225,8 +229,12 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
         staticPlan ??= planStaticRoutes(config, adapter, packageManager, notes);
         const plan = await planServerRoutes(config, adapter, staticPlan, baseUrl, fetchText, modes.indexOf(mode) === 0 ? notes : []);
 
-        const setupResult = await config.hooks.setup?.(hookContext);
-        if (typeof setupResult === 'function') teardown = setupResult;
+        try {
+          const setupResult = await config.hooks.setup?.(hookContext);
+          if (typeof setupResult === 'function') teardown = setupResult;
+        } catch (error) {
+          throw new RunError(`The setup hook failed: ${errorText(error)}`, ExitCode.Usage);
+        }
 
         const states = new Map<string, StorageState>();
         for (const scenario of scenarios) {
@@ -327,13 +335,16 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
         }
         await Promise.all(pending);
       } finally {
-        try {
-          await teardown?.();
-          await config.hooks.teardown?.(hookContext);
-        } finally {
-          await server?.stop();
-          server = undefined;
+        for (const step of [teardown, config.hooks.teardown && (() => config.hooks.teardown?.(hookContext))]) {
+          try {
+            await step?.();
+          } catch (error) {
+            // A failing teardown must not hide the result (or the error) of the run.
+            notes.push(`The teardown hook failed: ${errorText(error)}`);
+          }
         }
+        await server?.stop();
+        server = undefined;
       }
     }
 

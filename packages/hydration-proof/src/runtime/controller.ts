@@ -18,9 +18,10 @@ import {
   type SnapshotKind,
 } from '../shared/protocol.ts';
 import { clientViewHooks } from './client-view.ts';
-import { NativeMap, now } from './env.ts';
+import { NativeMap, now, sourceTextOf } from './env.ts';
 import { installErrorCapture, wrapRootCallbacks, type ErrorReport, type ErrorSink } from './errors.ts';
 import {
+  componentFunctions,
   creationStacks,
   debugSources,
   dehydratedBoundaries,
@@ -300,7 +301,13 @@ export function startRuntime(options: RuntimeOptions): RuntimeApi {
         if (node && node.nodeType !== Node.ELEMENT_NODE) node = node.parentNode ?? undefined;
         const fiber = node ? fiberOf(node) : undefined;
         if (!fiber) continue;
-        const entry: NodeSource = { id, owners: ownerChain(fiber), stacks: creationStacks(fiber), debugSources: debugSources(fiber) };
+        const entry: NodeSource = {
+          id,
+          owners: ownerChain(fiber),
+          stacks: creationStacks(fiber),
+          debugSources: debugSources(fiber),
+          functions: componentFunctions(fiber, sourceTextOf),
+        };
         out.push(entry);
       }
       return out;

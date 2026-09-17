@@ -14,6 +14,8 @@ export interface ResolvedFrame extends SourceLocation {
   absolute?: string;
   /** Full text of the original source, when known. */
   content?: string;
+  /** `component`: the location is the declaration of the component that rendered the element. */
+  scope?: 'element' | 'component';
 }
 
 /**
@@ -82,6 +84,17 @@ function sourceMapUrl(script: string, scriptUrl: string, header?: string): strin
   return new URL(last, scriptUrl).href;
 }
 
+/** 1-based line and 0-based column of a string offset. */
+function lineAndColumn(text: string, offset: number): { line: number; column: number } {
+  let line = 1;
+  let lineStart = 0;
+  for (let index = text.indexOf('\n'); index >= 0 && index < offset; index = text.indexOf('\n', index + 1)) {
+    line++;
+    lineStart = index + 1;
+  }
+  return { line, column: offset - lineStart };
+}
+
 function decodeDataUrl(url: string): string | undefined {
   const comma = url.indexOf(',');
   if (comma < 0) return undefined;
@@ -94,10 +107,21 @@ export class SourceResolver {
   private readonly fetchText: FetchText;
   private readonly rootDir: string;
   private readonly maps = new Map<string, Promise<SourceMap | undefined>>();
+  private readonly scripts = new Map<string, Promise<string | undefined>>();
 
   constructor(options: { fetchText: FetchText; rootDir: string }) {
     this.fetchText = options.fetchText;
     this.rootDir = options.rootDir;
+  }
+
+  private scriptText(scriptUrl: string): Promise<string | undefined> {
+    const key = scriptUrl.split('#')[0]!;
+    let pending = this.scripts.get(key);
+    if (!pending) {
+      pending = this.fetchText(key);
+      this.scripts.set(key, pending);
+    }
+    return pending;
   }
 
   private mapFor(scriptUrl: string): Promise<SourceMap | undefined> {
@@ -105,7 +129,7 @@ export class SourceResolver {
     let pending = this.maps.get(key);
     if (!pending) {
       pending = (async () => {
-        const script = await this.fetchText(key);
+        const script = await this.scriptText(key);
         if (!script) return undefined;
         const url = sourceMapUrl(script, key);
         if (!url) return undefined;
@@ -120,6 +144,12 @@ export class SourceResolver {
       this.maps.set(key, pending);
     }
     return pending;
+  }
+
+  /** Whether a script has a source map that can be loaded. */
+  async hasSourceMap(scriptUrl: string): Promise<boolean> {
+    if (!/^https?:/.test(scriptUrl)) return false;
+    return (await this.mapFor(scriptUrl)) !== undefined;
   }
 
   /** Resolve a local file path (absolute or project-relative) into a location with a code frame. */
@@ -166,6 +196,34 @@ export class SourceResolver {
     const path = normalizeSourcePath(original.source);
     if (isLibraryPath(isAbsolute(path) ? path : resolve(this.rootDir, path))) return undefined;
     return this.fromFile(path, original.line, original.column, original.content);
+  }
+
+  /**
+   * Find a function's source text in the given scripts and map its first
+   * token to the original file. The text must occur exactly once across all
+   * scripts, so a short or duplicated function never gives a wrong location.
+   */
+  async resolveFunction(text: string, scriptUrls: readonly string[]): Promise<ResolvedFrame | undefined> {
+    let match: { url: string; script: string; offset: number } | undefined;
+    for (const url of scriptUrls) {
+      if (!/^https?:/.test(url)) continue;
+      const script = await this.scriptText(url);
+      if (!script) continue;
+      const offset = script.indexOf(text);
+      if (offset < 0) continue;
+      if (match || script.indexOf(text, offset + 1) >= 0) return undefined;
+      match = { url, script, offset };
+    }
+    if (!match) return undefined;
+    const map = await this.mapFor(match.url);
+    if (!map) return undefined;
+    const start = lineAndColumn(match.script, match.offset);
+    const end = lineAndColumn(match.script, match.offset + text.length);
+    const original = map.firstPositionIn(start.line, start.column, end.line, end.column);
+    if (!original || original.ignored) return undefined;
+    const path = normalizeSourcePath(original.source);
+    if (isLibraryPath(isAbsolute(path) ? path : resolve(this.rootDir, path))) return undefined;
+    return { ...this.fromFile(path, original.line, original.column, original.content), scope: 'component' };
   }
 
   /** The first frame of a creation stack that belongs to application code. */

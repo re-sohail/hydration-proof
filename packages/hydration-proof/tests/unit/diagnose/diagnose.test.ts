@@ -61,6 +61,35 @@ describe('diagnose', () => {
     expect(result.suggestions[0]).toMatch(/Storage is only available in the browser/);
   });
 
+  it('scans the whole body when the location is a component declaration', () => {
+    const content = [
+      'export function Header() {',
+      '  return <h1>{new Date().getFullYear()}</h1>;',
+      '}',
+      '',
+      'export function Stats() {',
+      '  const label = "Active sessions: ";',
+      ...Array.from({ length: 8 }, (_, index) => `  // line ${index}`),
+      '  const count = Math.floor(Math.random() * 1000);',
+      '  return <p>{label}{count}</p>;',
+      '}',
+      '',
+      'export function Footer() {',
+      '  return <footer>{Date.now()}</footer>;',
+      '}',
+    ].join('\n');
+    const values = { server: 'Active sessions: 14', client: 'Active sessions: 85' };
+    const component = diagnose(issue(values), { ...base, source: { content, line: 5, file: 'Stats.jsx', scope: 'component' } });
+    expect(component.cause?.id).toBe('random');
+    // Neighbouring components are not part of the scan.
+    const notes = component.evidence.map((entry) => entry.message);
+    expect(notes).toContain('Stats.jsx:15 generates a random value: const count = Math.floor(Math.random() * 1000);');
+    expect(notes.some((note) => /current time/.test(note))).toBe(false);
+    // As an element location, line 5 only looks 5 lines down and misses the call.
+    const element = diagnose(issue(values), { ...base, source: { content, line: 5, file: 'Stats.jsx' } });
+    expect(element.cause?.id).not.toBe('random');
+  });
+
   it('keeps intentional suppression as info and flags suspicious suppression', () => {
     const intentional = diagnose(issue({ code: 'HP6001', suppressed: true, server: '10:01:02', client: '10:01:05' }), base);
     expect(intentional.cause?.id).toBe('suppressed');

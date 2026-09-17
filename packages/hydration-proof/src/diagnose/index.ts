@@ -121,8 +121,11 @@ export interface DiagnosisContext {
   server: { locale?: string; timezoneId?: string };
   /** Lower-case document response headers. */
   headers?: Record<string, string>;
-  /** Original source text and the 1-based line the element was created on. */
-  source?: { content: string; line: number; file: string };
+  /**
+   * Original source text and the 1-based line the element was created on
+   * (`scope: 'component'`: the line declares the component that rendered it).
+   */
+  source?: { content: string; line: number; file: string; scope?: 'element' | 'component' };
 }
 
 interface Candidate {
@@ -252,13 +255,35 @@ const SOURCE_PATTERNS: SourcePattern[] = [
 ];
 
 const SCAN_RADIUS = 30;
+const MAX_COMPONENT_LINES = 200;
+
+/** Last line (exclusive index) of the block that opens on `from`, by brace counting. */
+function blockEnd(lines: readonly string[], from: number): number {
+  let depth = 0;
+  let opened = false;
+  const limit = Math.min(lines.length, from + MAX_COMPONENT_LINES);
+  for (let index = from; index < limit; index++) {
+    const code = lines[index]!.replace(/(["'`])(?:\\.|(?!\1).)*\1/g, '').replace(/\/\/.*$/, '');
+    for (const char of code) {
+      if (char === '{') {
+        depth++;
+        opened = true;
+      } else if (char === '}') {
+        depth--;
+      }
+    }
+    if (opened && depth <= 0) return index + 1;
+  }
+  return limit;
+}
 
 function sourceCandidates(issue: Issue, context: DiagnosisContext): { candidates: Candidate[]; hits: Evidence[] } {
   const source = context.source;
   if (!source) return { candidates: [], hits: [] };
   const lines = source.content.split(/\r?\n/);
-  const start = Math.max(0, source.line - 1 - SCAN_RADIUS);
-  const end = Math.min(lines.length, source.line + 5);
+  const component = source.scope === 'component';
+  const start = component ? source.line - 1 : Math.max(0, source.line - 1 - SCAN_RADIUS);
+  const end = component ? blockEnd(lines, source.line - 1) : Math.min(lines.length, source.line + 5);
   const candidates: Candidate[] = [];
   const hits: Evidence[] = [];
   const best = new Map<CauseId, { distance: number; line: number; label: string; score: number }>();

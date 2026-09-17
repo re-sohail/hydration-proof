@@ -98,6 +98,29 @@ describe('SourceMap', () => {
     expect(indexed.originalPositionFor(12, 2)).toMatchObject({ source: 'b.ts', line: 8 });
   });
 
+  it('finds the first mapping inside a generated range, never one before it', () => {
+    const ranged = new SourceMap({
+      version: 3,
+      sources: ['prev.ts', 'Stats.tsx'],
+      mappings: encode([[[0, 0, 0, 0], [30, 1, 3, 0], [44, 1, 4, 2]], [], [[4, 1, 9, 0]]]),
+    });
+    // The function starts at column 20: the segment at 0 belongs to the previous module.
+    expect(ranged.firstPositionIn(1, 20, 1, 60)).toMatchObject({ source: 'Stats.tsx', line: 4 });
+    expect(ranged.originalPositionFor(1, 20)?.source).toBe('prev.ts');
+    expect(ranged.firstPositionIn(1, 45, 3, 10)).toMatchObject({ source: 'Stats.tsx', line: 10 });
+    expect(ranged.firstPositionIn(1, 45, 3, 2)).toBeUndefined();
+
+    const indexed = new SourceMap({
+      version: 3,
+      sections: [
+        { offset: { line: 0, column: 0 }, map: { version: 3, sources: ['a.ts'], mappings: encode([[[0, 0, 0, 0]]]) } },
+        { offset: { line: 0, column: 50 }, map: { version: 3, sources: ['b.ts'], mappings: encode([[[5, 0, 2, 0]]]) } },
+      ],
+    });
+    expect(indexed.firstPositionIn(1, 52, 1, 80)).toMatchObject({ source: 'b.ts', line: 3 });
+    expect(indexed.firstPositionIn(1, 10, 1, 40)).toBeUndefined();
+  });
+
   it('rejects other versions', () => {
     expect(() => new SourceMap({ version: 2 })).toThrow(/version/);
   });

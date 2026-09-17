@@ -44,15 +44,47 @@ The started app, and everything it spawned, is stopped when the run ends.
 | `dynamic` | `{}` | Example values for dynamic routes: `{ '/products/[id]': ['1', '42'] }` |
 | `include` | all | Globs a route must match |
 | `exclude` | `['/api/**']` | Globs of routes to skip |
-| `discover` | `true` when no `paths` | Find static routes from the framework |
+| `discover` | `true` when no `paths` | Find routes from the framework: the file system plus the build manifests |
+| `manifestExamples` | `3` | Most example values taken per dynamic route from the build (pages built with `generateStaticParams` / `getStaticPaths`) |
+| `query` | `{}` | Query-string variants per route: `{ '/search': ['?q=shoes', '?q=&page=2'] }` |
+| `sitemap` | `false` | Also test the routes in the sitemap: `true` reads `robots.txt` and `/sitemap.xml`, or give a sitemap URL or path |
+| `crawl` | `false` | Also test same-origin links found on tested pages: `true`, or `{ depth, limit }` (defaults `2` and `50`) |
+| `notFound` | `true` for Next.js | Also load `/hydration-proof-not-found` and check that the not-found page hydrates (it must answer 404) |
 
 Route objects:
 
 ```ts
 { path: '/404-page', expectStatus: [404], scenarios: ['default'], ready: { selector: '#app' } }
+{ path: '/account', expectRedirect: '/login' }
 ```
 
+| Field | Description |
+| --- | --- |
+| `path` | Path to load, with an optional query |
+| `pattern` | Route pattern used to group results and in fingerprints. Default: the path without the query |
+| `expectStatus` | HTTP statuses that are not errors (e.g. `[404]`) |
+| `expectRedirect` | Path the route is expected to end on. Without it, ending on another path is reported as HP9010 |
+| `scenarios` | Only test the route in these scenarios |
+| `ready` | Per-route `ready` options |
+
 Globs: `*` matches one path segment, `**` any number (`/blog/**` also matches `/blog`). Dynamic values fill parameters in order; separate values for several parameters with `/`, and a catch-all takes the rest: `'/[lang]/docs/[...slug]': ['en/getting-started/install']`.
+
+### Where routes come from
+
+Every page in the report has a `source`:
+
+| Source | Meaning |
+| --- | --- |
+| `config` | `routes.paths`, `routes.dynamic` or `--route` |
+| `discovered` | Found in `app/` or `pages/` (route groups, parallel routes and private folders are handled; API routes are skipped by the default `exclude`) |
+| `manifest` | Example values of a dynamic route, read from the Next.js build output (including i18n locales) |
+| `sitemap` | Listed in a sitemap. Sitemap indexes are followed, and absolute URLs are moved to the tested app, so a sitemap that names `https://example.com` still works locally |
+| `crawl` | Linked from a tested page. Links are grouped under the most specific known route pattern |
+| `not-found` | The not-found probe |
+
+Dynamic routes without example values are skipped, with a note that lists them. `include`, `exclude` and `--grep` apply to routes from every source.
+
+Discovered routes are cached in `.hydration-proof/cache/` (see `cache`).
 
 ## `scenarios`
 
@@ -72,6 +104,39 @@ The browser environments every route is tested in. Default: one scenario named `
 | `headers` | Extra request headers |
 | `localStorage`, `sessionStorage` | Entries written before any page script runs |
 | `initScripts` | Code run before page scripts |
+| `login` | `async ({ page, baseUrl }) => {}`: signs in once before the scenario's pages are tested. The cookies and storage it leaves behind are used for every page |
+| `mocks` | Answers for browser requests: `[{ url, method?, status?, headers?, body? }]`. `url` is a glob or a RegExp; object bodies are sent as JSON. Requests the server makes are not affected |
+| `include` | Only test routes matching these globs in this scenario |
+| `exclude` | Skip routes matching these globs in this scenario |
+
+### Signed-in pages
+
+A typical app has public pages, pages for customers and pages for admins. Give each group its own scenario:
+
+```ts
+export default defineConfig({
+  scenarios: [
+    { name: 'guest', exclude: ['/account/**', '/admin/**'] },
+    {
+      name: 'customer',
+      include: ['/account/**'],
+      login: async ({ page, baseUrl }) => {
+        await page.goto(`${baseUrl}/login`);
+        await page.fill('#email', process.env.TEST_USER_EMAIL ?? '');
+        await page.fill('#password', process.env.TEST_USER_PASSWORD ?? '');
+        await page.click('button[type=submit]');
+        await page.waitForURL('**/account');
+      },
+    },
+    // A cookie is enough when the app accepts a test session.
+    { name: 'admin', include: ['/admin/**'], cookies: [{ name: 'session', value: process.env.ADMIN_SESSION ?? '' }] },
+  ],
+});
+```
+
+Each login runs once per run (in a browser context with the scenario's settings). A failing login stops the run with exit code 2 and the error message. If a signed-in page still ends on the login page, the page gets an HP9010 warning, which usually means the login did not work. Keep credentials in environment variables, not in the config file.
+
+Other ways to sign in: `storageState` (a file saved by Playwright), `cookies`, or an `authorization` entry in `headers`.
 
 ## `ready`
 
@@ -108,6 +173,29 @@ Ignored findings stay in the report, marked as ignored, and do not fail the run.
 | `attributes` | Attribute names or patterns never compared |
 | `textPatterns` | A text difference is ignored if both values are equal after removing these patterns (e.g. `/\d{2}:\d{2}/`) |
 | `issues` | Rules with `code`, `route` (glob), `fingerprint` and/or `selector`, plus a required `reason` and an optional `expires` date. An expired rule fails the run, so temporary exceptions do not become permanent |
+
+## `hooks`
+
+Code that runs around the test run, after the app is up:
+
+```ts
+hooks: {
+  // Seed data or create users. May return a teardown function.
+  setup: async ({ baseUrl, rootDir }) => {
+    await fetch(`${baseUrl}/api/test/seed`, { method: 'POST' });
+    return async () => {
+      await fetch(`${baseUrl}/api/test/reset`, { method: 'POST' });
+    };
+  },
+  teardown: async ({ baseUrl }) => {},
+},
+```
+
+`setup` runs once per build mode before any page is tested, and before the scenario logins. Teardown functions always run, even when testing fails. An error in `setup` stops the run.
+
+## `cache`
+
+`true` by default. Routes found in the file system and the build output are remembered in `.hydration-proof/cache/routes.json`. The cache key covers the Next.js build id and the modification times of the route folders, so a new build or a changed route invalidates it. Use `cache: false` or `--no-cache` to always discover again. Sitemap and crawled routes are never cached.
 
 ## Other options
 

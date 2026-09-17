@@ -16,6 +16,9 @@ export const getOwnPropertyDescriptor: typeof Object.getOwnPropertyDescriptor =
   Object.getOwnPropertyDescriptor;
 export const objectKeys: typeof Object.keys = Object.keys;
 export const NativeError: ErrorConstructor = Error;
+const functionToString: () => string = Function.prototype.toString;
+/** Source text of a function, immune to a patched Function.prototype.toString. */
+export const sourceTextOf = (fn: object): string => functionToString.call(fn);
 
 const elementProto = Element.prototype;
 export const nativeAttachShadow: typeof elementProto.attachShadow = elementProto.attachShadow;

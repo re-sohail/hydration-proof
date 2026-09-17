@@ -185,6 +185,42 @@ export function creationStacks(fiber: Fiber, limit = 4): string[] {
   return stacks;
 }
 
+const MAX_FUNCTION_TEXT = 60_000;
+
+function componentFunction(fiber: Fiber): object | undefined {
+  let type = fiber.type;
+  if (fiber.tag === ForwardRef && type !== null && typeof type === 'object') type = type.render;
+  if ((fiber.tag === MemoComponent || fiber.tag === SimpleMemoComponent) && type !== null && typeof type === 'object') {
+    type = type.type;
+    if (type !== null && typeof type === 'object') type = type.render;
+  }
+  return typeof type === 'function' ? (type as object) : undefined;
+}
+
+/**
+ * Source text of the components above a host fiber, innermost first. In
+ * production builds component stacks often skip the component that rendered
+ * the element; its (minified) code can still be found in the loaded scripts.
+ */
+export function componentFunctions(fiber: Fiber, toText: (fn: object) => string, limit = 3): string[] {
+  const out: string[] = [];
+  for (let current = fiber.return; current !== null && out.length < limit; current = current.return) {
+    if (current.tag === HostRoot) break;
+    if (!isComponentFiber(current)) continue;
+    const fn = componentFunction(current);
+    if (!fn) continue;
+    let text: string;
+    try {
+      text = toText(fn);
+    } catch {
+      continue;
+    }
+    if (text.length < 24 || text.length > MAX_FUNCTION_TEXT || text.endsWith('[native code] }') || out.includes(text)) continue;
+    out.push(text);
+  }
+  return out;
+}
+
 /** `_debugSource` of the element and its owners (React 18 dev), innermost first. */
 export function debugSources(fiber: Fiber, limit = 4): { fileName: string; lineNumber: number; columnNumber?: number }[] {
   const out: { fileName: string; lineNumber: number; columnNumber?: number }[] = [];

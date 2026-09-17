@@ -1,5 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Report } from '../../src/report/model.ts';
@@ -79,5 +82,40 @@ describe.skipIf(!ready)('hydration-proof test (built CLI)', () => {
   it('reports usage errors with exit code 2', () => {
     expect(runCli(['test', '--shard', '3/2']).status).toBe(2);
     expect(runCli(['test', '--config', 'missing.config.ts']).status).toBe(2);
+  });
+
+  it('stops with exit code 2 when the setup hook fails, and still runs teardown', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hp-hooks-'));
+    const server = createServer((_request, response) => response.end('<!doctype html><p>static</p>'));
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    try {
+      const { port } = server.address() as AddressInfo;
+      writeFileSync(
+        join(dir, 'hydration-proof.config.mjs'),
+        [
+          "import { writeFileSync } from 'node:fs';",
+          'export default {',
+          "  adapter: 'none',",
+          "  reporters: ['json'],",
+          '  hooks: {',
+          "    setup: () => { throw new Error('database is down'); },",
+          "    teardown: () => writeFileSync(new URL('./teardown.txt', import.meta.url), 'done'),",
+          '  },',
+          '};',
+        ].join('\n'),
+      );
+      const result = spawnSync(process.execPath, [cli, 'test', '--url', `http://127.0.0.1:${port}`], {
+        cwd: dir,
+        encoding: 'utf8',
+        env: { ...process.env, CI: '', FORCE_COLOR: '0' },
+        timeout: 120_000,
+      });
+      expect(result.status, result.stderr).toBe(2);
+      expect(result.stderr).toContain('The setup hook failed: database is down');
+      expect(existsSync(join(dir, 'teardown.txt'))).toBe(true);
+    } finally {
+      server.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

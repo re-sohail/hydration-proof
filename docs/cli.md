@@ -33,6 +33,10 @@ Run `hydration-proof <command> --help` for the options of a command.
 | `--retries <n>` | Retries for pages that fail to load |
 | `--fail-on <level>` | `error` (default), `warning`, `info` or `never` |
 | `--headed` | Show the browser window |
+| `--sitemap` | Also test the routes listed in the sitemap (`robots.txt`, `/sitemap.xml`) |
+| `--crawl` | Also test same-origin links found on tested pages (depth 2, at most 50 routes; see `routes.crawl`) |
+| `--no-cache` | Discover routes again instead of using `.hydration-proof/cache` |
+| `--shard <i/n>` | Test part `i` of `n`, for parallel CI jobs. Every page lands in exactly one shard |
 
 Command-line options override the config file.
 

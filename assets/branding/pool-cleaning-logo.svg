@@ -1,0 +1,55 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 512 512"
+  role="img"
+  aria-labelledby="pool-cleaning-logo-title pool-cleaning-logo-description"
+>
+  <title id="pool-cleaning-logo-title">Pool cleaning logo mark</title>
+  <desc id="pool-cleaning-logo-description">
+    A rounded swimming pool with two waves, a sparkle, and a pool skimmer.
+  </desc>
+
+  <!-- Transparent by design: there is deliberately no background shape. -->
+  <path
+    d="M105 137C161 99 346 99 404 137C456 172 466 322 414 369C357 420 160 420 101 369C49 324 53 173 105 137Z"
+    fill="none"
+    stroke="#0B2B3C"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="34"
+  />
+
+  <path
+    d="M105 231C155 193 207 195 260 226C307 254 353 256 406 216"
+    fill="none"
+    stroke="#16C7C7"
+    stroke-linecap="round"
+    stroke-width="40"
+  />
+  <path
+    d="M106 300C158 264 209 266 263 299C311 328 354 330 398 296"
+    fill="none"
+    stroke="#2F80ED"
+    stroke-linecap="round"
+    stroke-width="40"
+  />
+
+  <path
+    d="M320 154C341 150 354 137 359 115C364 137 377 150 399 154C377 159 364 172 359 194C354 172 341 159 320 154Z"
+    fill="#16C7C7"
+  />
+
+  <!-- The skimmer crosses the pool rim to link cleaning with the water symbol. -->
+  <path
+    d="M343 349L437 104"
+    fill="none"
+    stroke="#0B2B3C"
+    stroke-linecap="round"
+    stroke-width="28"
+  />
+  <path
+    d="M297 399C287 398 281 388 285 378L313 322C318 311 331 306 342 311L377 327C388 332 393 344 389 356L376 394C372 405 362 412 350 411L297 399ZM320 378L351 383L363 348L337 336L320 378Z"
+    fill="#0B2B3C"
+    fill-rule="evenodd"
+  />
+</svg>

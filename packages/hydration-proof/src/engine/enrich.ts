@@ -7,7 +7,7 @@ import type { Issue } from '../report/model.ts';
 import type { ResolvedFrame, SourceResolver } from '../source/resolve.ts';
 import { isLibraryPath, SourceResolver as Resolver } from '../source/resolve.ts';
 import type { PageCapture } from './capture.ts';
-import { nodeSources } from './runtime-loader.ts';
+import { nodeSources, pageScripts } from './runtime-loader.ts';
 
 // Adds component names, source locations and likely causes to the issues of
 // a page, while the page is still open.
@@ -39,27 +39,49 @@ function dedupeStrings(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+interface Located {
+  frame?: ResolvedFrame;
+  /** Why no frame was found. */
+  reason?: string;
+}
+
 async function locate(
   issue: Issue,
   source: NodeSource | undefined,
   resolver: SourceResolver,
   production: boolean,
-): Promise<ResolvedFrame | undefined> {
+  scripts: () => Promise<string[]>,
+): Promise<Located> {
   for (const entry of source?.debugSources ?? []) {
     const resolved = resolver.fromFile(entry.fileName, entry.lineNumber, (entry.columnNumber ?? 1) - 1);
-    if (resolved.absolute !== undefined && !isLibraryPath(resolved.absolute)) return resolved;
+    if (resolved.absolute !== undefined && !isLibraryPath(resolved.absolute)) return { frame: resolved };
   }
   for (const stack of source?.stacks ?? []) {
     const resolved = await resolver.resolveCreationStack(stack);
-    if (resolved) return resolved;
+    if (resolved) return { frame: resolved };
   }
-  // Production: the component stack React reported carries real code positions.
-  for (const frame of componentFrames(issue.componentStack)) {
-    if (production && MINIFIED.test(frame.name) && frame.url === undefined) continue;
+  // Production: the component that rendered the element, found by its code.
+  const functions = source?.functions ?? [];
+  if (functions.length > 0) {
+    const urls = await scripts();
+    for (const text of functions) {
+      const resolved = await resolver.resolveFunction(text, urls);
+      if (resolved) return { frame: resolved };
+    }
+  }
+  // The component stack React reported carries real code positions.
+  const frames = componentFrames(issue.componentStack).filter((frame) => !(production && MINIFIED.test(frame.name) && frame.url === undefined));
+  for (const frame of frames) {
     const resolved = await resolver.resolveFrame(frame);
-    if (resolved) return resolved;
+    if (resolved) return { frame: resolved };
   }
-  return undefined;
+  if (!production) return { reason: 'The element could not be mapped to a source file.' };
+  const urls = [...new Set(frames.map((frame) => frame.url).filter((url) => url !== undefined))];
+  const mapped = await Promise.all(urls.map((url) => resolver.hasSourceMap(url)));
+  if (urls.length > 0 && !mapped.some(Boolean)) {
+    return { reason: 'Production build without browser source maps. Run with --mode development, or enable productionBrowserSourceMaps.' };
+  }
+  return { reason: 'Source maps only led to framework or library code. Run with --mode development for the exact file and line.' };
 }
 
 export async function enrichIssues(
@@ -80,6 +102,9 @@ export async function enrichIssues(
     }
   }
 
+  let scriptList: Promise<string[]> | undefined;
+  const scripts = (): Promise<string[]> => (scriptList ??= pageScripts(page).catch(() => []));
+
   const contents = new Map<string, ResolvedFrame>();
   for (const issue of analysis.issues) {
     const nodeId = analysis.nodes.get(issue.fingerprint);
@@ -93,10 +118,11 @@ export async function enrichIssues(
       }
     }
 
-    let resolved: ResolvedFrame | undefined;
+    let located: Located = {};
     if (resolver && options.sourceMaps && (issue.stage !== 'parsed' || source !== undefined)) {
-      resolved = await locate(issue, source, resolver, production).catch(() => undefined);
+      located = await locate(issue, source, resolver, production, scripts).catch(() => ({}));
     }
+    const resolved = located.frame;
     if (resolved) {
       issue.source = { file: resolved.file, line: resolved.line };
       if (resolved.column !== undefined) issue.source.column = resolved.column;
@@ -107,17 +133,17 @@ export async function enrichIssues(
       issue.sourceUnavailableReason = 'The location is in the server HTML (see the line and column in the message).';
     } else if (!options.sourceMaps) {
       issue.sourceUnavailableReason = 'Source mapping is turned off.';
-    } else if (production) {
-      issue.sourceUnavailableReason =
-        'Production build without browser source maps. Run with --mode development, or enable productionBrowserSourceMaps.';
     } else {
-      issue.sourceUnavailableReason = 'The element could not be mapped to a source file.';
+      issue.sourceUnavailableReason = located.reason ?? 'The element could not be mapped to a source file.';
     }
 
     const content = contents.get(issue.fingerprint);
     const context: DiagnosisContext = { ...options.diagnosis };
     if (capture.document?.headers) context.headers = capture.document.headers;
-    if (content?.content !== undefined) context.source = { content: content.content, line: content.line, file: content.file };
+    if (content?.content !== undefined) {
+      context.source = { content: content.content, line: content.line, file: content.file };
+      if (content.scope) context.source.scope = content.scope;
+    }
     const result = diagnose(issue, context);
     if (result.cause) issue.cause = { ...result.cause, docsUrl: causeDocsUrl(result.cause.id) };
     if (result.evidence.length > 0) issue.evidence = [...result.evidence, ...issue.evidence];

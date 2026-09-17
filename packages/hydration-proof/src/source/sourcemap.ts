@@ -141,7 +141,51 @@ export class SourceMap {
       }
     }
     if (found < 0) found = 0;
-    const [, sourceIndex, originalLine, originalColumn, nameIndex] = segments[found]!;
+    return this.position(segments[found]!);
+  }
+
+  /**
+   * The first mapped position inside a generated range (1-based lines,
+   * 0-based columns, end exclusive). Unlike `originalPositionFor`, it never
+   * falls back to a segment before the range.
+   */
+  firstPositionIn(startLine: number, startColumn: number, endLine: number, endColumn: number): OriginalPosition | undefined {
+    if (this.sections) {
+      const start = startLine - 1;
+      for (let i = 0; i < this.sections.length; i++) {
+        const section = this.sections[i]!;
+        const next = this.sections[i + 1];
+        const end = endLine - 1;
+        const beforeEnd = section.line < end || (section.line === end && section.column < endColumn);
+        const afterStart = !next || next.line > start || (next.line === start && next.column > startColumn);
+        if (!beforeEnd || !afterStart) continue;
+        const relative = (line: number, column: number): [number, number] => {
+          const inner = line - 1 - section.line;
+          if (inner < 0) return [1, 0];
+          return [inner + 1, inner === 0 ? Math.max(0, column - section.column) : column];
+        };
+        const [fromLine, fromColumn] = relative(startLine, startColumn);
+        const [toLine, toColumn] = relative(endLine, endColumn);
+        const found = section.map.firstPositionIn(fromLine, fromColumn, toLine, toColumn);
+        if (found) return found;
+      }
+      return undefined;
+    }
+
+    this.lines ??= decodeMappings(this.raw.mappings ?? '');
+    for (let line = startLine; line <= endLine; line++) {
+      for (const segment of this.lines[line - 1] ?? []) {
+        if (line === startLine && segment[0] < startColumn) continue;
+        if (line === endLine && segment[0] >= endColumn) break;
+        const position = this.position(segment);
+        if (position) return position;
+      }
+    }
+    return undefined;
+  }
+
+  private position(segment: Segment): OriginalPosition | undefined {
+    const [, sourceIndex, originalLine, originalColumn, nameIndex] = segment;
     const source = this.raw.sources?.[sourceIndex];
     if (source === null || source === undefined) return undefined;
     const position: OriginalPosition = {

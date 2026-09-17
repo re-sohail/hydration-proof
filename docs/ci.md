@@ -42,6 +42,34 @@ hydration:
       - .hydration-proof/report
 ```
 
+## Splitting across jobs
+
+`--shard i/n` tests one part of the pages. The split depends only on the route and scenario, so the parts never overlap and together cover every page, however the jobs are scheduled:
+
+```yaml
+jobs:
+  hydration:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      # checkout, setup-node, npm ci, install as above
+      - run: npx hydration-proof test --shard ${{ matrix.shard }}/3 --output .hydration-proof/report-${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hydration-report-${{ matrix.shard }}
+          path: .hydration-proof/report-${{ matrix.shard }}
+```
+
+Each job builds and starts the app itself. To build once, build in an earlier job, pass the build output as an artifact, and keep `buildWhen: 'if-missing'`.
+
+## Signed-in pages
+
+Store test credentials as CI secrets and read them in the scenario's `login` from `process.env` (see [Configuration](configuration.md#signed-in-pages)). Reports and screenshots can show what a signed-in user sees, so treat the report artifact like any other test output with user data.
+
 ## Tips
 
 - `CI=true` turns on one retry per page and never reuses a server that is already running.

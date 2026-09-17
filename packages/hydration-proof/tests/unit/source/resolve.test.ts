@@ -32,6 +32,23 @@ describe('codeFrame', () => {
   });
 });
 
+/** One mapping segment at `column` pointing to source 1, line 3 (relative to a first segment at 0/0/0/0). */
+function vlqPair(column: number): string {
+  const digits = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const vlq = (value: number): string => {
+    let v = value < 0 ? (-value << 1) | 1 : value << 1;
+    let out = '';
+    do {
+      let digit = v & 31;
+      v >>>= 5;
+      if (v > 0) digit |= 32;
+      out += digits[digit];
+    } while (v > 0);
+    return out;
+  };
+  return [column, 1, 2, 0].map(vlq).join('');
+}
+
 describe('SourceResolver', () => {
   let dir: string;
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -62,6 +79,35 @@ describe('SourceResolver', () => {
     // Cached: a second lookup does not fetch again.
     await resolver.resolveFrame({ name: 'Clock', url: 'http://localhost:3000/_next/static/chunks/chunk.js', line: 1, column: 12 });
     expect(fetched.filter((url) => url.endsWith('chunk.js'))).toHaveLength(1);
+  });
+
+  it('locates a component by its code in the loaded scripts', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'hp-resolve-'));
+    const content = "'use client';\n\nexport function Stats() {\n  return <p>{Math.random()}</p>;\n}\n";
+    const fn = 'function s(){return(0,r.jsx)("p",{children:Math.random()})}';
+    const chunk = `(self.TURBOPACK=[]).push([1,e=>{var r=e.r(1);${fn};e.s(["Stats",()=>s])}]);`;
+    const map = {
+      version: 3,
+      sources: ['turbopack:///[project]/node_modules/next/dist/client.js', 'turbopack:///[project]/app/Stats.jsx'],
+      sourcesContent: [null, content],
+      // column 0 -> library code; the function's first token -> Stats.jsx line 3.
+      mappings: `AAAA,${vlqPair(chunk.indexOf(fn))}`,
+    };
+    const scripts: Record<string, string> = {
+      'http://localhost/a.js': `${chunk}\n//# sourceMappingURL=a.js.map`,
+      'http://localhost/a.js.map': JSON.stringify(map),
+      'http://localhost/b.js': 'console.log("other")',
+      'http://localhost/c.js': `${chunk}`,
+    };
+    const resolver = new SourceResolver({ rootDir: dir, fetchText: async (url) => scripts[url] });
+    const resolved = await resolver.resolveFunction(fn, ['http://localhost/b.js', 'http://localhost/a.js']);
+    expect(resolved).toMatchObject({ file: 'app/Stats.jsx', line: 3, scope: 'component' });
+    expect(resolved?.content).toBe(content);
+    // Found in two scripts: ambiguous, so no location.
+    expect(await resolver.resolveFunction(fn, ['http://localhost/a.js', 'http://localhost/c.js'])).toBeUndefined();
+    expect(await resolver.resolveFunction('function missing(){}', ['http://localhost/a.js'])).toBeUndefined();
+    expect(await resolver.hasSourceMap('http://localhost/a.js')).toBe(true);
+    expect(await resolver.hasSourceMap('http://localhost/b.js')).toBe(false);
   });
 
   it('finds bundler-relative paths in parent folders (monorepos)', () => {

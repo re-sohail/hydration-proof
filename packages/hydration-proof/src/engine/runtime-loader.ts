@@ -76,6 +76,24 @@ export async function nodeSources(page: Page, ids: number[]): Promise<NodeSource
   ) as Promise<NodeSource[]>;
 }
 
+/** Script URLs the page loaded (tags and dynamically loaded chunks). */
+export async function pageScripts(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    interface Browser {
+      document: { scripts: ArrayLike<{ src: string }> };
+      performance: { getEntriesByType(type: string): { name: string; initiatorType?: string }[] };
+      location: { origin: string };
+    }
+    const { document, performance, location } = globalThis as unknown as Browser;
+    const urls = new Set<string>();
+    for (const script of Array.from(document.scripts)) if (script.src) urls.add(script.src);
+    for (const entry of performance.getEntriesByType('resource')) {
+      if (entry.initiatorType === 'script') urls.add(entry.name);
+    }
+    return [...urls].filter((url) => url.startsWith(location.origin)).slice(0, 300);
+  });
+}
+
 export async function nodeRects(page: Page, ids: number[]): Promise<NodeRect[]> {
   if (ids.length === 0) return [];
   return page.evaluate(

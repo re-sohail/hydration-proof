@@ -23,11 +23,20 @@ const everything: Required<HydrationProofConfig> = {
     devCommand: 'npm run dev -- --port {port}',
   },
   routes: {
-    paths: ['/', { path: '/404-page', pattern: '/404-page', expectStatus: [404], scenarios: ['default'], ready: { quietMs: 10 } }],
+    paths: [
+      '/',
+      { path: '/404-page', pattern: '/404-page', expectStatus: [404], scenarios: ['default'], ready: { quietMs: 10 } },
+      { path: '/account', expectRedirect: '/login' },
+    ],
     dynamic: { '/products/[id]': ['1', '42'] },
     include: ['/**'],
     exclude: ['/api/**'],
     discover: true,
+    query: { '/search': ['?q=shoes'] },
+    sitemap: '/sitemap-pages.xml',
+    crawl: { depth: 1, limit: 10 },
+    notFound: false,
+    manifestExamples: 2,
   },
   scenarios: [
     {
@@ -44,6 +53,15 @@ const everything: Required<HydrationProofConfig> = {
       localStorage: { theme: 'dark' },
       sessionStorage: { tab: '1' },
       initScripts: ['window.x = 1'],
+      login: async ({ page, baseUrl }) => {
+        await page.goto(`${baseUrl}/login`);
+      },
+      mocks: [
+        { url: '**/api/user', method: 'GET', status: 200, headers: { 'x-mock': '1' }, body: { name: 'Ada' } },
+        { url: /\/api\/flags/, body: 'on' },
+      ],
+      include: ['/account/**'],
+      exclude: ['/account/billing'],
     },
     { name: 'sized', viewport: { width: 100, height: 200 } },
   ],
@@ -69,6 +87,11 @@ const everything: Required<HydrationProofConfig> = {
   outputDir: 'out',
   screenshots: 'all',
   ci: { failOn: 'warning', maxWarnings: 3, baseline: 'baseline.json', newIssuesOnly: true },
+  hooks: {
+    setup: async () => async () => {},
+    teardown: () => {},
+  },
+  cache: false,
 };
 
 describe('config schema', () => {
@@ -104,7 +127,9 @@ describe('config schema', () => {
   it('emits a valid JSON Schema that agrees with the validator on JSON configs', () => {
     const ajv = new Ajv({ strict: false });
     const validate = ajv.compile(configJsonSchema());
-    const json = JSON.parse(JSON.stringify({ ...everything, ignore: { selectors: ['.ad'], attributes: ['x'] } }));
+    // RegExps (and functions) have no JSON form.
+    const scenarios = everything.scenarios.map((scenario) => ({ ...scenario, mocks: scenario.mocks?.filter((mock) => typeof mock.url === 'string') }));
+    const json = JSON.parse(JSON.stringify({ ...everything, scenarios, ignore: { selectors: ['.ad'], attributes: ['x'] } }));
     expect(validate(json), JSON.stringify(validate.errors)).toBe(true);
     expect(validate({ unknown: true })).toBe(false);
     expect(validate({ workers: 0 })).toBe(false);

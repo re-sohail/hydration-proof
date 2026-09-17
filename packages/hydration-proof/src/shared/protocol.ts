@@ -337,6 +337,8 @@ export interface NodeSource {
   stacks: string[];
   /** Babel/SWC `__source` of the element and its owners (React 18 dev), innermost first. */
   debugSources: { fileName: string; lineNumber: number; columnNumber?: number }[];
+  /** Source text of the components above the element, innermost first (located in the loaded scripts). */
+  functions: string[];
 }
 
 export interface NodeRect {
