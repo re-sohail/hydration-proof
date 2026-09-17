@@ -94,6 +94,7 @@ export async function screenshotServerHtml(
   document: DocumentResponse,
   contextOptions: BrowserContextOptions,
   maxHeight: number,
+  mask: readonly string[] = [],
 ): Promise<Buffer | undefined> {
   if (document.body === undefined) return undefined;
   const context = await browser.newContext({ ...contextOptions, serviceWorkers: 'block' });
@@ -112,7 +113,7 @@ export async function screenshotServerHtml(
     });
     const page = await context.newPage();
     await page.goto(document.url, { waitUntil: 'load', timeout: 15_000 }).catch(() => undefined);
-    return await screenshot(page, maxHeight);
+    return await screenshot(page, maxHeight, mask);
   } catch {
     return undefined;
   } finally {
@@ -120,7 +121,8 @@ export async function screenshotServerHtml(
   }
 }
 
-export async function screenshot(page: import('playwright-core').Page, maxHeight: number): Promise<Buffer | undefined> {
+/** Full-page JPEG, at most `maxHeight` tall; elements matching `mask` are blacked out. */
+export async function screenshot(page: import('playwright-core').Page, maxHeight: number, mask: readonly string[] = []): Promise<Buffer | undefined> {
   try {
     const size = await page.evaluate(() => {
       const root = (globalThis as unknown as { document: { documentElement: { scrollWidth: number; scrollHeight: number } } }).document
@@ -129,7 +131,15 @@ export async function screenshot(page: import('playwright-core').Page, maxHeight
     });
     const height = Math.min(size.height, maxHeight);
     const clip = { x: 0, y: 0, width: Math.max(1, size.width), height: Math.max(1, height) };
-    return await page.screenshot({ type: 'jpeg', quality: 70, fullPage: true, clip, animations: 'disabled', caret: 'hide' });
+    return await page.screenshot({
+      type: 'jpeg',
+      quality: 70,
+      fullPage: true,
+      clip,
+      animations: 'disabled',
+      caret: 'hide',
+      ...(mask.length > 0 ? { mask: mask.map((selector) => page.locator(selector)), maskColor: '#000000' } : {}),
+    });
   } catch {
     return undefined;
   }

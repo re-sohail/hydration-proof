@@ -6,6 +6,7 @@ import { ISSUES, docsUrl } from '../packages/hydration-proof/src/issues/registry
 import { suggestionsFor } from '../packages/hydration-proof/src/issues/suggestions.ts';
 import { configJsonSchema } from '../packages/hydration-proof/src/config/schema.ts';
 import { reportJsonSchema } from '../packages/hydration-proof/src/report/schema.ts';
+import { baselineJsonSchema } from '../packages/hydration-proof/src/ci/baseline-schema.ts';
 import { CAUSES, causeDocsUrl } from '../packages/hydration-proof/src/diagnose/index.ts';
 
 const check = process.argv.includes('--check');
@@ -66,6 +67,7 @@ const outputs: [string, string][] = [
   ['docs/causes.md', causes],
   ['packages/hydration-proof/schema/config.json', `${JSON.stringify(configJsonSchema(), null, 2)}\n`],
   ['packages/hydration-proof/schema/report.json', `${JSON.stringify(reportJsonSchema(), null, 2)}\n`],
+  ['packages/hydration-proof/schema/baseline.json', `${JSON.stringify(baselineJsonSchema(), null, 2)}\n`],
 ];
 
 let stale = false;

@@ -50,6 +50,8 @@ export interface EngineOptions {
   screenshots: 'off' | 'failures' | 'all';
   /** Tallest screenshot, in CSS pixels. */
   screenshotMaxHeight: number;
+  /** Elements blacked out in screenshots. */
+  screenshotMask?: readonly string[];
 }
 
 export const DEFAULT_ENGINE: EngineOptions = {
@@ -166,9 +168,10 @@ async function runOnce(browser: Browser, job: PageJob, options: EngineOptions): 
             if (rect) boxes.push({ fingerprint, x: rect.x, y: rect.y, width: rect.width, height: rect.height });
           }
           const size = page.viewportSize() ?? { width: 1280, height: 720 };
-          const hydrated = await screenshot(page, options.screenshotMaxHeight);
+          const mask = options.screenshotMask ?? [];
+          const hydrated = await screenshot(page, options.screenshotMaxHeight, mask);
           const server = result.document
-            ? await screenshotServerHtml(browser, result.document, parseOptions, options.screenshotMaxHeight)
+            ? await screenshotServerHtml(browser, result.document, parseOptions, options.screenshotMaxHeight, mask)
             : undefined;
           screenshots = { width: size.width, height: size.height, boxes };
           if (hydrated) screenshots.hydrated = hydrated;

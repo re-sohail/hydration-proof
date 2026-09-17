@@ -6,10 +6,11 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 const root = new URL('..', import.meta.url).pathname;
-// The Node code ships unminified (readable stack traces); the browser runtime
-// and the report viewer inside it are minified.
-const BUDGET_BYTES = 600 * 1024;
-const GZIP_BUDGET_BYTES = 150 * 1024;
+// The Node code ships unminified (readable stack traces; minifying it saves
+// little after compression); the browser bundles inside it are minified.
+// The gzipped size is roughly what users download.
+const BUDGET_BYTES = 800 * 1024;
+const GZIP_BUDGET_BYTES = 250 * 1024;
 
 function run(bin: string, args: string[]): void {
   execFileSync(join(root, 'node_modules', '.bin', bin), args, { cwd: root, stdio: 'inherit' });

@@ -343,3 +343,10 @@ hooks: {
 | `outputDir` | `.hydration-proof/report` | Where reports are written |
 | `ci.failOn` | `'error'` | Lowest severity that fails the run, or `'never'` |
 | `ci.maxWarnings` | | Fail when there are more warnings |
+| `ci.baseline` | `.hydration-proof/baseline.json` | Baseline file ([baselines](ci.md#adopting-on-an-existing-app-baselines)) |
+| `ci.newIssuesOnly` | `false` | Fail only on findings that are not in the baseline (`--new-only`) |
+| `ci.budget` | | Allowed findings per severity, route glob or code ([budgets](ci.md#budgets)) |
+| `ci.history` | `false` | Append one line per run to a history file (`true` or a path) ([trends](ci.md#trends)) |
+| `owners` | CODEOWNERS | Route owners and CODEOWNERS lookup ([owners](ci.md#owners)) |
+| `redact` | on | Remove secrets and personal data from reports: `false`, or `{ builtIn, patterns, selectors }` ([details](ci.md#personal-data-and-secrets)) |
+| `projects` | | Monorepo apps to test, each with its own config ([monorepos](ci.md#monorepos)) |

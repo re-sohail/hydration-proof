@@ -25,6 +25,8 @@ export interface RoutePlan {
   patterns: string[];
   /** Framework details of route patterns (parallel and intercepting routes). */
   flags: Record<string, RouteFlags>;
+  /** Routes found in the file system (with their source files). */
+  discovered: DiscoveredRoute[];
 }
 
 export const NOT_FOUND_PATH = '/hydration-proof-not-found';
@@ -74,6 +76,7 @@ export function planStaticRoutes(
   const planned = new Map<string, PlannedRoute>();
   const patterns = new Set<string>();
   const flags: Record<string, RouteFlags> = {};
+  let discoveredRoutes: DiscoveredRoute[] = [];
   const add = (route: RouteEntry, source: PlannedRoute['source'], pattern?: string): void => {
     const resolvedPattern = route.pattern ?? pattern ?? pathOf(route.path);
     patterns.add(resolvedPattern);
@@ -85,6 +88,7 @@ export function planStaticRoutes(
   const discoverEnabled = config.routes.discover ?? (config.routes.paths.length === 0 && adapter.discoverRoutes !== undefined);
   if (discoverEnabled) {
     const { discovered, examples } = discover(config, adapter, packageManager, notes);
+    discoveredRoutes = discovered;
     const manifestExamples = new Map(examples);
     const skipped: string[] = [];
     for (const route of discovered) {
@@ -127,7 +131,7 @@ export function planStaticRoutes(
   }
 
   if (planned.size === 0) add({ path: '/' }, 'config');
-  return { routes: applyFilters(config, [...planned.values()]), patterns: [...patterns], flags };
+  return { routes: applyFilters(config, [...planned.values()]), patterns: [...patterns], flags, discovered: discoveredRoutes };
 }
 
 /** Routes that need the running app: sitemap and the not-found probe. */
@@ -156,7 +160,7 @@ export async function planServerRoutes(
   if (notFound && !known.has(NOT_FOUND_PATH)) {
     extra.push({ path: NOT_FOUND_PATH, pattern: '(not found)', expectStatus: [404], source: 'not-found' });
   }
-  return { routes: [...routes, ...applyFilters(config, extra)], patterns: plan.patterns, flags: plan.flags };
+  return { ...plan, routes: [...routes, ...applyFilters(config, extra)] };
 }
 
 export function routeAllowed(config: ResolvedConfig, path: string): boolean {

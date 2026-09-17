@@ -10,6 +10,8 @@ One line per page while testing, the most important issues of failing pages with
 
 `report.json` contains everything: run information, a summary, every page and every issue. Its format is described by `node_modules/hydration-proof/schema/report.json` and only changes in a compatible way within `schemaVersion: 1`.
 
+Findings also carry their owners (`owners`), whether a baseline knows them (`baseline`, `new`), and the project they belong to in a monorepo (`project`). The run records the git commit and branch. With `ci.history`, `history` holds the previous runs. Values removed by redaction are counted in `summary.redacted`.
+
 Every page records where its route came from (`source`: `config`, `discovered`, `manifest`, `sitemap`, `crawl` or `not-found`) and, when the tool started the app, the error and warning lines the server printed while the page loaded (`serverLogs`).
 
 Every issue has a `fingerprint` that stays the same across runs as long as the problem is the same (same code, route pattern, element and attribute), which is what ignore rules and baselines use.

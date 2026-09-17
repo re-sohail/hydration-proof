@@ -3,7 +3,7 @@
 
 import { myers } from '../../dom/myers.ts';
 import { describeSplit } from '../../matrix/classify.ts';
-import type { Issue, PageResult, Report, TimelineEntry } from '../model.ts';
+import type { HistoryEntry, Issue, PageResult, Report, TimelineEntry } from '../model.ts';
 import { css } from './styles.ts';
 
 type Child = Node | string | null | undefined | false;
@@ -56,6 +56,8 @@ interface State {
   cause: string;
   group: string;
   scenario: string;
+  owner: string;
+  onlyNew: boolean;
   showIgnored: boolean;
   pageId: string | undefined;
   issue: string | undefined;
@@ -68,6 +70,8 @@ const state: State = {
   cause: '',
   group: '',
   scenario: '',
+  owner: '',
+  onlyNew: false,
   showIgnored: false,
   pageId: undefined,
   issue: undefined,
@@ -93,6 +97,8 @@ function issueVisible(issue: Issue): boolean {
   if (!state.severities.has(issue.severity)) return false;
   if (state.cause && issue.cause?.id !== state.cause) return false;
   if (state.group && !issue.code.startsWith(state.group)) return false;
+  if (state.owner && !(issue.owners ?? []).includes(state.owner)) return false;
+  if (state.onlyNew && !issue.new) return false;
   if (state.query) {
     const haystack = [issue.code, issue.title, issue.message, issue.selector, issue.component, issue.source?.file, issue.route.url, issue.cause?.title]
       .filter(Boolean)
@@ -105,7 +111,7 @@ function issueVisible(issue: Issue): boolean {
 
 function pageVisible(page: PageResult): boolean {
   if (state.scenario && page.scenario !== state.scenario) return false;
-  const filtering = state.query !== '' || state.cause !== '' || state.group !== '';
+  const filtering = state.query !== '' || state.cause !== '' || state.group !== '' || state.owner !== '' || state.onlyNew;
   if (filtering) return issuesOf(page).some(issueVisible);
   return state.statuses.has(page.status);
 }
@@ -195,7 +201,9 @@ function issueView(issue: Issue, open: boolean): HTMLElement {
       : null,
     issue.flaky && issue.occurrences ? h('span', { className: 'cause flaky', title: 'Seen in some runs only' }, `flaky ${issue.occurrences.seen}/${issue.occurrences.runs}`) : null,
     issue.onlyIn?.length ? h('span', { className: 'cause', title: describeSplit(issue.onlyIn) }, `only ${issue.onlyIn.map((split) => split.values.join('/')).join(' · ')}`) : null,
-    issue.ignored ? h('span', { className: 'cause' }, 'ignored') : null,
+    issue.new ? h('span', { className: 'cause new', title: 'Not in the baseline' }, 'new') : null,
+    issue.baseline && !issue.new ? h('span', { className: 'cause', title: `In the baseline since ${issue.baseline.firstSeen}` }, 'baseline') : null,
+    issue.ignored ? h('span', { className: 'cause' }, issue.ignored.rule === 'baseline' ? 'known' : 'ignored') : null,
     h(
       'span',
       { className: 'where mono' },
@@ -230,6 +238,14 @@ function issueView(issue: Issue, open: boolean): HTMLElement {
   fact('Confidence', `${Math.round(issue.confidence * 100)}%`);
   if (issue.onlyIn?.length) fact('Environments', describeSplit(issue.onlyIn));
   if (issue.occurrences) fact('Runs', `Seen in ${issue.occurrences.seen} of ${issue.occurrences.runs}`);
+  if (issue.owners?.length) fact('Owners', issue.owners.join(', '));
+  if (issue.baseline) {
+    fact(
+      'Baseline',
+      [`since ${issue.baseline.firstSeen}`, issue.baseline.expires ? `expires ${issue.baseline.expires}` : '', issue.baseline.reason ?? ''].filter(Boolean).join(' · '),
+    );
+  }
+  if (issue.project) fact('Project', issue.project);
   fact('Fingerprint', h('code', {}, issue.fingerprint), ' ', copyButton(issue.fingerprint));
   body.append(facts);
 
@@ -416,6 +432,7 @@ function pageDetail(page: PageResult | undefined): HTMLElement {
   const react = page.react ? `React ${page.react.version} (${page.react.build})` : 'No React';
   const environment = Object.entries(page.environment ?? {}).map(([axis, value]) => `${axis}: ${value}`);
   const facts = [
+    page.project ? `Project: ${page.project}` : '',
     `Scenario: ${page.baseScenario ?? page.scenario}`,
     ...environment,
     page.mode ? `Mode: ${page.mode}` : '',
@@ -468,7 +485,11 @@ function renderList(): void {
         'span',
         {},
         h('div', { className: 'path' }, pathOf(page.url)),
-        h('div', { className: 'scenario' }, [page.scenario, page.mode, page.flakiness ? `flaky ${Math.round(page.flakiness * 100)}%` : ''].filter(Boolean).join(' · ')),
+        h(
+          'div',
+          { className: 'scenario' },
+          [page.project, page.scenario, page.mode, page.flakiness ? `flaky ${Math.round(page.flakiness * 100)}%` : ''].filter(Boolean).join(' · '),
+        ),
       ),
       h('span', {}, counts),
     );
@@ -527,6 +548,10 @@ function header(): HTMLElement {
   if (summary.flaky !== undefined) tiles.push(['Flaky findings', summary.flaky, summary.flaky ? 'warning' : '']);
   const proven = new Set(report.issues.filter((issue) => issue.cause?.proven).map((issue) => issue.fingerprint)).size;
   if (report.issues.some((issue) => issue.probes)) tiles.push(['Proven causes', proven, proven ? 'ok' : '']);
+  if (summary.new !== undefined) {
+    tiles.push(['New findings', summary.new, summary.new ? 'error' : 'ok']);
+    tiles.push(['In the baseline', summary.known ?? 0, '']);
+  }
   return h(
     'header',
     { className: 'header' },
@@ -546,6 +571,45 @@ function header(): HTMLElement {
         .map((text) => h('span', {}, text)),
     ),
     h('div', { className: 'tiles' }, tiles.map(([label, value, tone]) => h('div', { className: `tile ${tone}` }, h('b', {}, String(value)), h('span', {}, label)))),
+    trend(report.history, summary),
+  );
+}
+
+const SVG = 'http://www.w3.org/2000/svg';
+
+function svg(tag: string, attrs: Record<string, string | number>): SVGElement {
+  const el = document.createElementNS(SVG, tag);
+  for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, String(value));
+  return el;
+}
+
+/** Errors and warnings of the last runs (from ci.history), with this run last. */
+function trend(history: HistoryEntry[] | undefined, current: Report['summary']): HTMLElement | null {
+  if (!history || history.length === 0) return null;
+  const points = [...history.map((entry) => entry.issues), current.issues];
+  const width = 240;
+  const height = 48;
+  const max = Math.max(1, ...points.map((point) => Math.max(point.error, point.warning)));
+  const x = (index: number): number => (points.length === 1 ? width : (index / (points.length - 1)) * (width - 8) + 4);
+  const y = (value: number): number => height - 4 - (value / max) * (height - 8);
+  const chart = svg('svg', { viewBox: `0 0 ${width} ${height}`, width, height, role: 'img', class: 'trend-chart' });
+  const title = svg('title', {});
+  title.textContent = `Errors and warnings in the last ${points.length} runs`;
+  chart.append(title);
+  for (const [key, className] of [['warning', 'trend-warning'], ['error', 'trend-error']] as const) {
+    const line = points.map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)},${y(point[key]).toFixed(1)}`).join(' ');
+    chart.append(svg('path', { d: line, class: className, fill: 'none' }));
+    const last = points.length - 1;
+    chart.append(svg('circle', { cx: x(last), cy: y(points[last]![key]), r: 3, class: className }));
+  }
+  const previous = history[history.length - 1]!.issues;
+  const delta = current.issues.error - previous.error;
+  const change = delta === 0 ? 'same errors as the last run' : delta > 0 ? `${delta} more error${delta === 1 ? '' : 's'} than the last run` : `${-delta} fewer error${delta === -1 ? '' : 's'} than the last run`;
+  return h(
+    'div',
+    { className: 'trend' },
+    chart,
+    h('span', { className: 'small' }, `Last ${points.length} runs: `, h('span', { className: 'legend error' }, 'errors'), ' ', h('span', { className: 'legend warning' }, 'warnings'), ` · ${change}`),
   );
 }
 
@@ -558,6 +622,13 @@ function toolbar(): HTMLElement {
   const causes = new Map<string, string>();
   for (const issue of report.issues) if (issue.cause) causes.set(issue.cause.id, issue.cause.title);
   const scenarios = [...new Set(report.pages.map((page) => page.scenario))];
+  const owners = [...new Set(report.issues.flatMap((issue) => issue.owners ?? []))].sort();
+  const hasNew = report.issues.some((issue) => issue.new);
+  const onlyNew = h('input', { type: 'checkbox' });
+  onlyNew.addEventListener('change', () => {
+    state.onlyNew = onlyNew.checked;
+    render();
+  });
   const ignored = h('input', { type: 'checkbox' });
   ignored.addEventListener('change', () => {
     state.showIgnored = ignored.checked;
@@ -572,6 +643,8 @@ function toolbar(): HTMLElement {
     causes.size > 0 ? select('All causes', [...causes], (value) => (state.cause = value)) : null,
     select('All kinds', [['HP1', 'DOM mismatches'], ['HP2', 'React errors'], ['HP3', 'Invalid HTML'], ['HP4', 'External changes'], ['HP6', 'Suppression'], ['HP9', 'Test problems']], (value) => (state.group = value)),
     scenarios.length > 1 ? select('All scenarios', scenarios.map((name) => [name, name]), (value) => (state.scenario = value)) : null,
+    owners.length > 0 ? select('All owners', owners.map((name) => [name, name]), (value) => (state.owner = value)) : null,
+    hasNew ? h('label', {}, onlyNew, 'Only new') : null,
     h('label', {}, ignored, 'Show ignored'),
   );
 }

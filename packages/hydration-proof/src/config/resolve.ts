@@ -405,7 +405,12 @@ export function resolveConfig(
       textPatterns: config.ignore?.textPatterns ?? [],
       issues: config.ignore?.issues ?? [],
     },
-    reporters: overrides.reporters ?? config.reporters ?? ['list', 'json', 'html'],
+    // On GitHub Actions the annotations and job summary are added unless --reporter chooses the reporters.
+    reporters:
+      overrides.reporters ??
+      (env['GITHUB_ACTIONS'] === 'true'
+        ? [...new Set<ReporterName>([...(config.reporters ?? ['list', 'json', 'html']), 'github'])]
+        : (config.reporters ?? ['list', 'json', 'html'])),
     outputDir: resolvePath(rootDir, overrides.outputDir ?? config.outputDir ?? '.hydration-proof/report'),
     screenshots: 'off',
     ci: {

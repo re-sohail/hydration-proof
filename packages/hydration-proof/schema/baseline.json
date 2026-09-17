@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hydration.jscrate.dev/schema/baseline.json",
+  "title": "hydration-proof baseline",
+  "description": "hydration-proof baseline",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "tool": {
+      "const": "hydration-proof"
+    },
+    "updatedAt": {
+      "type": "string"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "description": "An accepted finding.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fingerprint": {
+            "description": "Stable issue fingerprint.",
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "route": {
+            "description": "Route pattern.",
+            "type": "string"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "attribute": {
+            "type": "string"
+          },
+          "cause": {
+            "description": "Likely cause when the entry was recorded.",
+            "type": "string"
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "firstSeen": {
+            "description": "Date (YYYY-MM-DD).",
+            "type": "string"
+          },
+          "lastSeen": {
+            "description": "Date (YYYY-MM-DD).",
+            "type": "string"
+          },
+          "expires": {
+            "description": "After this date (YYYY-MM-DD) the entry no longer excuses the finding and the run fails.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why this finding is accepted for now.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "code",
+          "title",
+          "route",
+          "scenarios",
+          "firstSeen",
+          "lastSeen"
+        ]
+      }
+    }
+  },
+  "required": [
+    "version",
+    "tool",
+    "updatedAt",
+    "entries"
+  ]
+}

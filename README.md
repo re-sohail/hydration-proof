@@ -7,6 +7,7 @@ This repository contains:
 | Path | |
 | --- | --- |
 | [`packages/hydration-proof`](packages/hydration-proof) | The CLI and Node API published to npm as [`hydration-proof`](https://www.npmjs.com/package/hydration-proof) |
+| [`packages/eslint-plugin-hydration-proof`](packages/eslint-plugin-hydration-proof) | ESLint rules published as [`eslint-plugin-hydration-proof`](https://www.npmjs.com/package/eslint-plugin-hydration-proof) |
 | [`docs`](docs) | Documentation (also published at https://hydration.jscrate.dev) |
 | [`fixtures`](fixtures) | Apps with known hydration bugs, used to prove every detection |
 | [`scripts`](scripts) | Fixture, measurement and documentation tooling |
@@ -24,7 +25,7 @@ pnpm test                 # unit and browser tests
 pnpm fixtures:build       # build the Next.js fixture apps
 pnpm test:e2e             # every fixture case against production builds
 pnpm verify:fixtures      # React itself confirms each broken fixture (dev mode)
-pnpm build                # build, publint, are-the-types-wrong, size budget
+pnpm build                # build, publint, are-the-types-wrong, size budget (both packages)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

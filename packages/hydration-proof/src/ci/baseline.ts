@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import type { Issue } from '../report/model.ts';
 
 // Baselines let a team adopt hydration-proof on an app with known problems:
@@ -102,7 +102,6 @@ export function buildBaseline(issues: readonly Issue[], previous: BaselineFile |
   const sorted = [...entries.values()].sort((a, b) => a.route.localeCompare(b.route) || a.code.localeCompare(b.code) || a.fingerprint.localeCompare(b.fingerprint));
   for (const entry of sorted) entry.scenarios.sort();
   return {
-    $schema: './node_modules/hydration-proof/schema/baseline.json',
     version: BASELINE_VERSION,
     tool: 'hydration-proof',
     updatedAt: now.toISOString(),
@@ -110,9 +109,12 @@ export function buildBaseline(issues: readonly Issue[], previous: BaselineFile |
   };
 }
 
-export function writeBaseline(file: string, baseline: BaselineFile): void {
+/** Write the baseline; `rootDir` (where node_modules is) gives editors the schema. */
+export function writeBaseline(file: string, baseline: BaselineFile, rootDir?: string): void {
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(baseline, null, 2)}\n`);
+  const schema = rootDir ? relative(dirname(file), join(rootDir, 'node_modules', 'hydration-proof', 'schema', 'baseline.json')).split(sep).join('/') : undefined;
+  const content: BaselineFile = schema ? { $schema: schema, ...baseline } : baseline;
+  writeFileSync(file, `${JSON.stringify(content, null, 2)}\n`);
 }
 
 export interface ExpiredEntry {

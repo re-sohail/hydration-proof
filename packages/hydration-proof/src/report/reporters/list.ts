@@ -29,7 +29,8 @@ function issueLines(issue: Issue, c: Palette): string[] {
   const color = issue.severity === 'error' ? c.red : issue.severity === 'warning' ? c.yellow : c.cyan;
   const cause = issue.cause ? c.gray(`  (${causeText(issue)})`) : '';
   const flaky = issue.flaky && issue.occurrences ? c.yellow(`  flaky ${issue.occurrences.seen}/${issue.occurrences.runs}`) : '';
-  const lines = [`    ${color(issue.code)} ${issue.title}${cause}${flaky}`];
+  const status = issue.new ? c.red('  new') : issue.baseline ? c.gray('  in baseline') : '';
+  const lines = [`    ${color(issue.code)} ${issue.title}${cause}${flaky}${status}`];
   const where = [issue.selector, issue.component ? `in ${issue.component}` : undefined].filter(Boolean).join('  ');
   if (where) lines.push(`      ${c.gray(where)}`);
   if (issue.server !== undefined || issue.client !== undefined) {
@@ -40,6 +41,7 @@ function issueLines(issue: Issue, c: Palette): string[] {
     lines.push(`      ${issue.message}`);
   }
   if (issue.source) lines.push(`      ${c.cyan(`${issue.source.file}:${issue.source.line}${issue.source.column ? `:${issue.source.column}` : ''}`)}`);
+  if (issue.owners?.length) lines.push(`      ${c.gray(`owners: ${issue.owners.join(', ')}`)}`);
   if (issue.suggestions[0]) lines.push(`      ${c.gray(`→ ${issue.suggestions[0]}`)}`);
   return lines;
 }
@@ -82,7 +84,11 @@ export function listReporter(stream: NodeJS.WriteStream = process.stdout): Repor
       ];
       if (s.ignored) rows.push(['Ignored issues', c.gray(String(s.ignored))]);
       if (s.flaky) rows.push(['Flaky findings', c.yellow(String(s.flaky))]);
-      rows.push(['Duration', formatDuration(Date.now() - started)]);
+      if (s.new !== undefined) {
+        rows.push(['New findings', s.new ? c.red(String(s.new)) : c.green('0')]);
+        rows.push(['In the baseline', c.gray(String(s.known ?? 0))]);
+      }
+      rows.push(['Duration', formatDuration(report.run.durationMs || Date.now() - started)]);
       const unique = (issues: Issue[]): Issue[] => {
         const seen = new Set<string>();
         return issues.filter((issue) => !seen.has(issue.fingerprint) && seen.add(issue.fingerprint));
@@ -118,7 +124,11 @@ export function listReporter(stream: NodeJS.WriteStream = process.stdout): Repor
       const width = Math.max(...rows.map(([label]) => label.length)) + 1;
       context.write(`\n${rows.map(([label, value]) => `  ${`${label}:`.padEnd(width + 1)} ${value}`).join('\n')}\n`);
       for (const failure of context.failures) context.write(`\n  ${c.red(symbols.error)} ${failure}\n`);
-      if (context.exitCode === 0) context.write(`\n  ${c.green('No hydration problems found.')}\n`);
+      if (context.exitCode === 0) {
+        context.write(`\n  ${c.green(s.new !== undefined && s.known ? 'No new hydration problems found.' : 'No hydration problems found.')}\n`);
+      }
+      const redacted = Object.values(s.redacted ?? {}).reduce((total, count) => total + count, 0);
+      if (redacted > 0) context.write(`  ${c.gray(`${redacted} value${redacted === 1 ? '' : 's'} (emails, tokens, ...) were removed from the report.`)}\n`);
       const reportFile = report.run.cwd ? relative(report.run.cwd, context.config.outputDir) || '.' : context.config.outputDir;
       const html = context.config.reporters.includes('html') ? `${reportFile}/report.html` : undefined;
       if (html) context.write(`  ${c.gray('Report:')} ${html}\n`);

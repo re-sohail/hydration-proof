@@ -95,7 +95,17 @@ const everything: Required<HydrationProofConfig> = {
   reporters: ['list', 'json'],
   outputDir: 'out',
   screenshots: 'all',
-  ci: { failOn: 'warning', maxWarnings: 3, baseline: 'baseline.json', newIssuesOnly: true },
+  ci: {
+    failOn: 'warning',
+    maxWarnings: 3,
+    baseline: 'baseline.json',
+    newIssuesOnly: true,
+    budget: { error: 0, warning: 5, info: 100, routes: { '/checkout/**': { error: 0, warning: 1 } }, codes: { HP1004: 2 } },
+    history: '.hydration-proof/history.ndjson',
+  },
+  owners: { routes: { '/checkout/**': ['@acme/payments'], '/blog/**': '@acme/content' }, codeowners: '.github/CODEOWNERS' },
+  redact: { builtIn: true, patterns: [/ORDER-\d+/], selectors: ['.credit-card'] },
+  projects: ['apps/web', { path: 'apps/admin', name: 'admin', config: 'hydration-proof.config.ts' }],
   hooks: {
     setup: async () => async () => {},
     teardown: () => {},
@@ -167,7 +177,7 @@ describe('config schema', () => {
     const validate = ajv.compile(configJsonSchema());
     // RegExps (and functions) have no JSON form.
     const scenarios = everything.scenarios.map((scenario) => ({ ...scenario, mocks: scenario.mocks?.filter((mock) => typeof mock.url === 'string') }));
-    const { interactions: _functionsOnly, ...rest } = everything;
+    const { interactions: _functionsOnly, redact: _regexps, ...rest } = everything;
     const json = JSON.parse(JSON.stringify({ ...rest, scenarios, ignore: { selectors: ['.ad'], attributes: ['x'] } }));
     expect(validate(json), JSON.stringify(validate.errors)).toBe(true);
     expect(validate({ unknown: true })).toBe(false);

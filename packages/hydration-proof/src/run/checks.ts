@@ -39,6 +39,8 @@ export interface LateChecksInput {
   expired: ExpiredRule[];
   notes: string[];
   write(text: string): void;
+  /** Owners and baseline state for new findings. */
+  prepare?(issues: Issue[]): void;
 }
 
 function fixed(scenario: ScenarioSpec, clock: number): ScenarioSpec {
@@ -161,6 +163,7 @@ export async function runLateChecks(input: LateChecksInput): Promise<void> {
     const issues = issuesFromDrafts(drafts, { route: page.route, scenario: page.scenario });
     for (const issue of issues) if (input.mode) issue.mode = input.mode;
     input.expired.push(...applyIgnores(issues, { textPatterns: config.ignore.textPatterns, rules: config.ignore.issues }));
+    input.prepare?.(issues);
     const known = new Set(page.issues);
     const added = issues.filter((issue) => !known.has(issue.fingerprint));
     input.allIssues.push(...added);

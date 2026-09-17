@@ -64,6 +64,18 @@
         },
         "ci": {
           "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "shards": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -125,6 +137,18 @@
         },
         "flaky": {
           "type": "integer"
+        },
+        "new": {
+          "type": "integer"
+        },
+        "known": {
+          "type": "integer"
+        },
+        "redacted": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
         }
       },
       "required": [
@@ -347,6 +371,9 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1
+          },
+          "project": {
+            "type": "string"
           },
           "timeline": {
             "type": "array",
@@ -806,6 +833,36 @@
                 "result"
               ]
             }
+          },
+          "baseline": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "firstSeen": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "expires": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "firstSeen"
+            ]
+          },
+          "new": {
+            "type": "boolean"
+          },
+          "owners": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "project": {
+            "type": "string"
           }
         },
         "required": [
@@ -821,6 +878,74 @@
           "evidence",
           "suggestions",
           "docsUrl"
+        ]
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "number"
+          },
+          "pages": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "issues": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "error": {
+                "type": "integer"
+              },
+              "warning": {
+                "type": "integer"
+              },
+              "info": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "error",
+              "warning",
+              "info"
+            ]
+          },
+          "codes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "fingerprints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "date",
+          "durationMs",
+          "pages",
+          "failed",
+          "issues",
+          "codes",
+          "fingerprints"
         ]
       }
     }

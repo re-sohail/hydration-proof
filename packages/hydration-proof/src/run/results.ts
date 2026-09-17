@@ -139,6 +139,7 @@ function countBySeverity(issues: readonly Issue[]): Record<Severity, number> {
 
 const SEVERITIES: readonly Severity[] = ['error', 'warning', 'info'];
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? '' : 's'}`;
+const exceed = (count: number): string => (count === 1 ? 'exceeds' : 'exceed');
 
 export function policy(config: ResolvedConfig, report: Report, expired: ExpiredRule[], expiredBaseline: readonly ExpiredEntry[] = []): string[] {
   const failures: string[] = [];
@@ -157,7 +158,7 @@ export function policy(config: ResolvedConfig, report: Report, expired: ExpiredR
   for (const severity of SEVERITIES) {
     const limit = budget?.[severity];
     if (limit !== undefined && totals[severity] > limit) {
-      failures.push(`${plural(totals[severity], severity)} exceed the budget of ${limit}.`);
+      failures.push(`${plural(totals[severity], severity)} ${exceed(totals[severity])} the budget of ${limit}.`);
     }
   }
   for (const [glob, limits] of Object.entries(budget?.routes ?? {})) {
@@ -166,13 +167,13 @@ export function policy(config: ResolvedConfig, report: Report, expired: ExpiredR
     for (const severity of SEVERITIES) {
       const limit = limits[severity];
       if (limit !== undefined && counts[severity] > limit) {
-        failures.push(`${plural(counts[severity], severity)} on routes ${glob} exceed the budget of ${limit}.`);
+        failures.push(`${plural(counts[severity], severity)} on routes ${glob} ${exceed(counts[severity])} the budget of ${limit}.`);
       }
     }
   }
   for (const [code, limit] of Object.entries(budget?.codes ?? {})) {
     const count = active.filter((issue) => issue.code === code).length;
-    if (count > limit) failures.push(`${plural(count, `${code} finding`)} exceed the budget of ${limit}.`);
+    if (count > limit) failures.push(`${plural(count, `${code} finding`)} ${exceed(count)} the budget of ${limit}.`);
   }
   if (maxWarnings !== undefined && totals.warning > maxWarnings) {
     failures.push(`${totals.warning} warnings exceed ci.maxWarnings (${maxWarnings}).`);
@@ -184,7 +185,10 @@ export function policy(config: ResolvedConfig, report: Report, expired: ExpiredR
     seen.add(key);
     failures.push(`Ignore rule "${rule.reason}" expired on ${rule.expires}.`);
   }
+  const reported = new Set<string>();
   for (const { entry } of expiredBaseline) {
+    if (reported.has(entry.fingerprint)) continue;
+    reported.add(entry.fingerprint);
     failures.push(`The baseline entry for ${entry.code} on ${entry.route}${entry.selector ? ` (${entry.selector})` : ''} expired on ${entry.expires}.`);
   }
   return failures;

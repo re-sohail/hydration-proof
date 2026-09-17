@@ -114,6 +114,16 @@ pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .cause { font-size: 12px; background: var(--panel-2); border-radius: 999px; padding: 2px 10px; }
 .cause.proven { background: var(--ok-bg); color: var(--ok); }
 .cause.flaky { background: var(--warning-bg); color: var(--warning); }
+.cause.new { background: var(--error-bg); color: var(--error); }
+.trend { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.trend-chart { background: var(--panel-2); border-radius: var(--radius); }
+.trend-chart path { stroke-width: 2; }
+.trend-chart .trend-error { stroke: var(--error); fill: var(--error); }
+.trend-chart .trend-warning { stroke: var(--warning); fill: var(--warning); }
+.trend-chart path.trend-error, .trend-chart path.trend-warning { fill: none; }
+.legend::before { content: ''; display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; }
+.legend.error::before { background: var(--error); }
+.legend.warning::before { background: var(--warning); }
 table.probes { border-collapse: collapse; width: 100%; margin: 6px 0 10px; font-size: 13px; }
 table.probes th, table.probes td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 table.probes th { color: var(--muted); font-weight: 600; font-size: 12px; }

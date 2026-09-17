@@ -75,3 +75,14 @@ export function applyIgnores(issues: Issue[], options: IgnoreOptions): ExpiredRu
   }
   return expired;
 }
+
+/** Expired rules that still match findings (for reports merged later). */
+export function expiredRules(issues: readonly Issue[], rules: readonly IgnoreRule[], today: Date = new Date()): ExpiredRule[] {
+  const out: ExpiredRule[] = [];
+  for (const rule of rules) {
+    if (!isExpired(rule, today)) continue;
+    const issue = issues.find((candidate) => ruleMatches(rule, candidate));
+    if (issue) out.push({ rule, issue });
+  }
+  return out;
+}

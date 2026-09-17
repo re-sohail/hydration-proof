@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import type { Browser } from 'playwright-core';
 import { selectAdapter } from './adapters/index.ts';
 import { applyIgnores, type ExpiredRule } from './analyze/ignore.ts';
+import { applyBaseline, BaselineError, buildBaseline, readBaseline, writeBaseline, type BaselineFile, type ExpiredEntry } from './ci/baseline.ts';
 import { ExitCode } from './ci/exit-codes.ts';
+import { OwnerResolver } from './ci/owners.ts';
+import { createRedactor } from './ci/redact.ts';
 import { ConfigError, loadConfig } from './config/load.ts';
 import { resolveConfig, type CliOverrides, type ResolvedConfig, type ResolvedScenario } from './config/resolve.ts';
 import type { BrowserName, BuildMode } from './config/types.ts';
@@ -22,7 +25,10 @@ import { linksFromSnapshot, patternFor } from './routes/crawl.ts';
 import { matchesAny, pathOf } from './routes/pattern.ts';
 import { RunError } from './run/errors.ts';
 import { planServerRoutes, planStaticRoutes, routeAllowed, type PlannedRoute, type RoutePlan } from './run/plan.ts';
+import { appendHistory, historyEntry, readHistory } from './report/history.ts';
+import { changedRouteFilter, type RouteFilter } from './run/changed.ts';
 import { runLateChecks } from './run/checks.ts';
+import { runProjects } from './run/projects.ts';
 import { isProbeCandidate, runProbes, type ProbeTarget } from './run/probes.ts';
 import { aggregateRuns } from './run/repeat.ts';
 import {
@@ -36,6 +42,7 @@ import {
   writeScreenshots,
 } from './run/results.ts';
 import { prepareServer } from './run/server.ts';
+import { currentBranch, currentCommit } from './util/git.ts';
 import { detectPackageManager, selfCommand } from './util/package-manager.ts';
 import { VERSION } from './util/version.ts';
 
@@ -60,6 +67,8 @@ export interface RunResult {
   failures: string[];
   files: string[];
   notes: string[];
+  /** Where the reports were written. */
+  outputDir: string;
 }
 
 function readyOptions(config: ResolvedConfig, route: PlannedRoute): ReadyOptions {
@@ -185,11 +194,46 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     throw error;
   }
 
+  if (config.projects.length > 0) {
+    return runProjects(config, (project) => run(project), {
+      overrides: options.overrides ?? {},
+      write,
+      reporters: options.reporters ?? [],
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+  }
+
   const adapter = selectAdapter(config.adapter, config.rootDir);
   const packageManager = detectPackageManager(config.rootDir);
   const { reporters, unsupported } = createReporters(config.reporters);
   reporters.push(...(options.reporters ?? []));
   if (unsupported.length > 0) notes.push(`Reporter${unsupported.length === 1 ? '' : 's'} not available yet: ${unsupported.join(', ')}.`);
+
+  let baseline: BaselineFile | undefined;
+  try {
+    baseline = readBaseline(config.ci.baseline);
+  } catch (error) {
+    if (error instanceof BaselineError) throw new RunError(error.message, ExitCode.Usage);
+    throw error;
+  }
+  const baselineName = relative(config.rootDir, config.ci.baseline) || config.ci.baseline;
+  if (config.ci.newIssuesOnly && !baseline && !config.ci.updateBaseline) {
+    throw new RunError(
+      `--new-only compares with a baseline, but ${baselineName} does not exist. Create it with: ${selfCommand(packageManager, 'baseline')}`,
+      ExitCode.Usage,
+    );
+  }
+  const expiredBaseline: ExpiredEntry[] = [];
+  const owners = new OwnerResolver({ rootDir: config.rootDir, routes: config.owners.routes, codeowners: config.owners.codeowners });
+  const redactor = config.redact === false ? undefined : createRedactor({ builtIn: config.redact.builtIn, patterns: config.redact.patterns });
+  /** Owners and baseline state of new findings (after ignore rules). */
+  const prepareIssues = (issues: Issue[]): void => {
+    owners.assign(issues);
+    if (baseline) expiredBaseline.push(...applyBaseline(issues, baseline, { newOnly: config.ci.newIssuesOnly }));
+  };
+  const shownPage = (page: PageResult): PageResult => (redactor ? redactor.page(page) : page);
+  const shownIssues = (issues: Issue[]): Issue[] => (redactor ? issues.map((issue) => redactor.issue(issue)) : issues);
+  if (baseline && config.ci.newIssuesOnly) notes.push(`Only findings that are not in ${baselineName} fail the run.`);
 
   const playwright = await loadPlaywright(config.rootDir);
   const modes: BuildMode[] = config.server.mode === 'both' ? ['production', 'development'] : [config.server.mode];
@@ -260,6 +304,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     const order = new Map<string, number>();
     let context: ReporterContext | undefined;
     let staticPlan: RoutePlan | undefined;
+    let routeFilter: RouteFilter | undefined;
     let printedNotes = 0;
 
     for (const mode of modes) {
@@ -272,8 +317,13 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
       let teardown: (() => Promise<void> | void) | undefined;
       try {
         // Build output (manifests) exists now; plan the routes once.
-        staticPlan ??= planStaticRoutes(config, adapter, packageManager, notes);
-        const plan = await planServerRoutes(config, adapter, staticPlan, baseUrl, fetchText, modes.indexOf(mode) === 0 ? notes : []);
+        if (!staticPlan) {
+          staticPlan = planStaticRoutes(config, adapter, packageManager, notes);
+          routeFilter = changedRouteFilter(config, adapter, staticPlan, notes);
+          if (routeFilter) staticPlan = { ...staticPlan, routes: staticPlan.routes.filter(routeFilter) };
+        }
+        const serverPlan = await planServerRoutes(config, adapter, staticPlan, baseUrl, fetchText, modes.indexOf(mode) === 0 ? notes : []);
+        const plan = routeFilter ? { ...serverPlan, routes: serverPlan.routes.filter(routeFilter) } : serverPlan;
 
         try {
           const setupResult = await config.hooks.setup?.(hookContext);
@@ -340,6 +390,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
           resolver,
           serverEnvironment: serverEnvironment(config),
           screenshots: config.screenshots,
+          screenshotMask: config.redact === false ? [] : config.redact.selectors,
         };
 
         const crawl = config.routes.crawl;
@@ -363,7 +414,9 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
           if (shot?.run.screenshots) page.screenshots = writeScreenshots(config.outputDir, shot.run, shot.run.screenshots);
           pages.push(page);
           allIssues.push(...aggregated.issues);
-          for (const reporter of reporters) pending.push(Promise.resolve(reporter.onPage?.(page, aggregated.issues, reporterContext)));
+          const visiblePage = shownPage(page);
+          const visibleIssues = shownIssues(aggregated.issues);
+          for (const reporter of reporters) pending.push(Promise.resolve(reporter.onPage?.(visiblePage, visibleIssues, reporterContext)));
         };
         const onResult = (pageRun: PageRun): void => {
           const id = pageRun.job.id.replace(REPEAT_SUFFIX, '');
@@ -371,6 +424,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
           const issues = filterChecks(config, pageRun.analysis.issues);
           if (modeTag) for (const issue of issues) issue.mode = modeTag;
           expired.push(...applyIgnores(issues, { textPatterns: config.ignore.textPatterns, rules: config.ignore.issues }));
+          prepareIssues(issues);
           const page = toPageResult(pageRun, issues, planned?.route, modeTag);
           page.id = id;
           if (planned) {
@@ -396,6 +450,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
             for (const path of linksFromSnapshot(snapshot.tree, pageRun.capture.finalUrl)) {
               if (crawlBudget <= 0) break;
               if (seenPaths.has(path) || !routeAllowed(config, path)) continue;
+              if (routeFilter && !routeFilter({ path, pattern: patternFor(path, plan.patterns), source: 'crawl' })) continue;
               seenPaths.add(path);
               crawlBudget--;
               crawled.push({ path, pattern: patternFor(path, plan.patterns), source: 'crawl' });
@@ -464,6 +519,7 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
           expired,
           notes,
           write,
+          prepare: prepareIssues,
         });
       } finally {
         for (const step of [teardown, config.hooks.teardown && (() => config.hooks.teardown?.(hookContext))]) {
@@ -480,6 +536,8 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
     }
 
     classifyEnvironments(pages, allIssues);
+    const commit = currentCommit(config.rootDir);
+    const branch = currentBranch(config.rootDir);
     pages.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
     const finishedAt = new Date();
     const report: Report = {
@@ -502,22 +560,36 @@ export async function run(options: RunOptions = {}): Promise<RunResult> {
         mode: config.server.mode,
         baseUrl: baseUrls.join(', '),
         ...(process.env['GITHUB_ACTIONS'] ? { ci: 'github-actions' } : process.env['GITLAB_CI'] ? { ci: 'gitlab' } : process.env['CI'] ? { ci: 'ci' } : {}),
+        ...(commit !== undefined ? { commit } : {}),
+        ...(branch !== undefined ? { branch } : {}),
       },
       summary: summarize(pages, allIssues),
       pages,
       issues: allIssues,
     };
+    if (config.ci.history) {
+      const history = readHistory(config.ci.history);
+      if (history.length > 0) report.history = history;
+    }
+    if (config.ci.updateBaseline) {
+      const next = buildBaseline(allIssues, baseline);
+      writeBaseline(config.ci.baseline, next, config.rootDir);
+      notes.push(`Baseline written to ${baselineName}: ${next.entries.length} finding${next.entries.length === 1 ? '' : 's'}.`);
+    }
 
     if (notes.length > printedNotes) write(`\n${notes.slice(printedNotes).map((note) => `  ${note}\n`).join('')}`);
-    const failures = policy(config, report, expired);
+    const failures = policy(config, report, expired, expiredBaseline);
     const exitCode = failures.length > 0 ? ExitCode.Failed : ExitCode.Ok;
+    if (config.ci.history) appendHistory(config.ci.history, historyEntry(report));
+    const shown = redactor ? redactor.report(report) : report;
+    if (redactor && redactor.counts.size > 0) shown.summary = { ...shown.summary, redacted: Object.fromEntries(redactor.counts) };
     const files: string[] = [];
     const endContext = context ?? { config, baseUrl: baseUrls[0] ?? '', totalPages: 0, write };
     for (const reporter of reporters) {
-      const written = await reporter.onEnd?.(report, { ...endContext, exitCode, failures });
+      const written = await reporter.onEnd?.(shown, { ...endContext, exitCode, failures });
       if (written) files.push(...written);
     }
-    return { report, exitCode, failures, files, notes };
+    return { report: shown, exitCode, failures, files, notes, outputDir: config.outputDir };
   } finally {
     options.signal?.removeEventListener('abort', abort);
     await closeBrowsers();

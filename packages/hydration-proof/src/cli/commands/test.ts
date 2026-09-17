@@ -31,6 +31,11 @@ Options:
       --retries <n>         Retries for pages that fail to load
       --fail-on <level>     error (default), warning, info or never
       --shard <i/n>         Run part i of n (for parallel CI jobs)
+      --changed [ref]       Only routes affected by files changed since ref
+                            (default: the pull request base or main)
+      --new-only            Fail only on findings that are not in the baseline
+      --update-baseline     Write the baseline from this run's findings
+      --project <name>      Only this monorepo project (repeatable)
       --crawl               Also test same-origin links found on pages
       --sitemap             Also test routes listed in /sitemap.xml
       --no-cache            Discover routes again instead of using the cache
@@ -50,7 +55,31 @@ function positiveInt(value: string | undefined, flag: string, min = 1): number |
   return number;
 }
 
-export function parseTestArgs(args: string[]): { overrides: CliOverrides; config?: string; help: boolean } {
+/** `--changed` takes an optional value: `--changed`, `--changed main`, `--changed=main`. */
+function extractChanged(args: string[]): { rest: string[]; changed?: string | true } {
+  const rest: string[] = [];
+  let changed: string | true | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--changed') {
+      const next = args[i + 1];
+      if (next !== undefined && !next.startsWith('-')) {
+        changed = next;
+        i++;
+      } else {
+        changed = true;
+      }
+    } else if (arg.startsWith('--changed=')) {
+      changed = arg.slice('--changed='.length) || true;
+    } else {
+      rest.push(arg);
+    }
+  }
+  return changed === undefined ? { rest } : { rest, changed };
+}
+
+export function parseTestArgs(argv: string[]): { overrides: CliOverrides; config?: string; help: boolean } {
+  const { rest: args, changed } = extractChanged(argv);
   const { values } = parseArgs({
     args,
     allowPositionals: false,
@@ -80,6 +109,9 @@ export function parseTestArgs(args: string[]): { overrides: CliOverrides; config
       probe: { type: 'boolean' },
       interactions: { type: 'boolean' },
       navigation: { type: 'boolean' },
+      'new-only': { type: 'boolean' },
+      'update-baseline': { type: 'boolean' },
+      project: { type: 'string', multiple: true },
       repeat: { type: 'string' },
       headed: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
@@ -132,6 +164,10 @@ export function parseTestArgs(args: string[]): { overrides: CliOverrides; config
   if (values.matrix !== undefined) overrides.matrix = values.matrix;
   if (values.probe !== undefined) overrides.probes = values.probe;
   if (values.interactions !== undefined) overrides.interactions = values.interactions;
+  if (values['new-only'] !== undefined) overrides.newOnly = values['new-only'];
+  if (values['update-baseline'] !== undefined) overrides.updateBaseline = values['update-baseline'];
+  if (values.project?.length) overrides.projects = values.project;
+  if (changed !== undefined) overrides.changed = changed;
   if (values.navigation !== undefined) overrides.navigation = values.navigation;
   const repeat = positiveInt(values.repeat, '--repeat');
   if (repeat !== undefined) {

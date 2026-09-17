@@ -1,20 +1,23 @@
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { parseArgs } from 'node:util';
 import { selectAdapter } from '../../adapters/index.ts';
 import { ExitCode } from '../../ci/exit-codes.ts';
 import { findConfigFile } from '../../config/load.ts';
 import { detectPackageManager, installDevCommand, selfCommand } from '../../util/package-manager.ts';
 import { palette } from '../style.ts';
-import type { CommandContext } from '../context.ts';
+import { ciFile, githubWorkflow, gitlabJob, type CiProvider } from '../ci-templates.ts';
+import { UsageError, type CommandContext } from '../context.ts';
 
-export const INIT_HELP = `Usage: hydration-proof init [--force]
+export const INIT_HELP = `Usage: hydration-proof init [--ci github|gitlab] [--force]
 
 Create hydration-proof.config.ts for this project and ignore the report folder in git.
 
 Options:
-      --force   Overwrite an existing config
-  -h, --help    Show this help
+      --ci <provider>   Also write a CI workflow: github (.github/workflows/hydration.yml)
+                        or gitlab (.gitlab/hydration-proof.yml)
+      --force           Overwrite existing files
+  -h, --help            Show this help
 `;
 
 const GITIGNORE_ENTRY = '.hydration-proof/report/';
@@ -66,16 +69,20 @@ export async function initCommand(args: string[], context: CommandContext): Prom
   const { values } = parseArgs({
     args,
     strict: true,
-    options: { force: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
+    options: { force: { type: 'boolean' }, ci: { type: 'string' }, help: { type: 'boolean', short: 'h' } },
   });
   if (values.help) {
     context.out(INIT_HELP);
     return ExitCode.Ok;
   }
+  if (values.ci !== undefined && values.ci !== 'github' && values.ci !== 'gitlab') {
+    throw new UsageError(`--ci must be github or gitlab, got "${values.ci}".`);
+  }
+  const provider = values.ci as CiProvider | undefined;
   const c = palette();
   const cwd = context.cwd;
   const existing = findConfigFile(cwd);
-  if (existing && !values.force) {
+  if (existing && !values.force && !provider) {
     context.err(`${relative(cwd, existing)} already exists. Use --force to overwrite it.\n`);
     return ExitCode.Usage;
   }
@@ -85,10 +92,26 @@ export async function initCommand(args: string[], context: CommandContext): Prom
   const nextjs = adapter.name === 'next';
   const routes = adapter.discoverRoutes?.({ rootDir: cwd, packageManager: manager }) ?? [];
   const dynamic = routes.filter((route) => route.dynamic).map((route) => route.pattern);
-  const typescript = existsSync(join(cwd, 'tsconfig.json'));
-  const file = join(cwd, typescript ? 'hydration-proof.config.ts' : 'hydration-proof.config.mjs');
-  writeFileSync(file, configSource({ typescript, nextjs, dynamic }));
-  context.out(`${c.green('Created')} ${relative(cwd, file)}\n`);
+  if (existing && !values.force) {
+    context.out(`${c.gray('Kept')} ${relative(cwd, existing)}\n`);
+  } else {
+    const typescript = existsSync(join(cwd, 'tsconfig.json'));
+    const file = join(cwd, typescript ? 'hydration-proof.config.ts' : 'hydration-proof.config.mjs');
+    writeFileSync(file, configSource({ typescript, nextjs, dynamic }));
+    context.out(`${c.green('Created')} ${relative(cwd, file)}\n`);
+  }
+
+  if (provider) {
+    const target = join(cwd, ciFile(provider));
+    if (existsSync(target) && !values.force) {
+      context.err(`${relative(cwd, target)} already exists. Use --force to overwrite it.\n`);
+      return ExitCode.Usage;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, provider === 'github' ? githubWorkflow(manager, cwd) : gitlabJob(manager, cwd));
+    context.out(`${c.green('Created')} ${relative(cwd, target)}\n`);
+    if (provider === 'gitlab') context.out(`  Include it from .gitlab-ci.yml:  include: [{ local: ${ciFile(provider)} }]\n`);
+  }
 
   const gitignore = join(cwd, '.gitignore');
   if (existsSync(gitignore)) {

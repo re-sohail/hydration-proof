@@ -2,9 +2,11 @@ import { ExitCode } from '../ci/exit-codes.ts';
 import { ConfigError } from '../config/load.ts';
 import { RunError } from '../run.ts';
 import { VERSION } from '../util/version.ts';
+import { baselineCommand, BASELINE_HELP } from './commands/baseline.ts';
 import { doctorCommand, DOCTOR_HELP, nodeSupported } from './commands/doctor.ts';
 import { initCommand, INIT_HELP } from './commands/init.ts';
 import { installCommand, INSTALL_HELP } from './commands/install.ts';
+import { mergeReportsCommand, MERGE_HELP } from './commands/merge-reports.ts';
 import { testCommand, TEST_HELP } from './commands/test.ts';
 import { UsageError, type CommandContext } from './context.ts';
 import { palette } from './style.ts';
@@ -15,10 +17,12 @@ Find, explain and prevent React hydration problems.
 Usage: hydration-proof <command> [options]
 
 Commands:
-  test       Test the app's routes for hydration problems (default)
-  init       Create hydration-proof.config.ts
-  install    Download the browser (Chromium by default)
-  doctor     Check the environment and configuration
+  test            Test the app's routes for hydration problems (default)
+  baseline        Record the current findings; "test --new-only" then fails only on new ones
+  merge-reports   Combine the reports of parallel CI jobs
+  init            Create hydration-proof.config.ts (and a CI workflow with --ci)
+  install         Download the browser (Chromium by default)
+  doctor          Check the environment and configuration
 
 Run "hydration-proof <command> --help" for command options.
 Docs: https://hydration.jscrate.dev
@@ -28,6 +32,8 @@ type Command = (args: string[], context: CommandContext) => Promise<number>;
 
 const COMMANDS: Record<string, { run: Command; help: string }> = {
   test: { run: testCommand, help: TEST_HELP },
+  baseline: { run: baselineCommand, help: BASELINE_HELP },
+  'merge-reports': { run: mergeReportsCommand, help: MERGE_HELP },
   init: { run: initCommand, help: INIT_HELP },
   install: { run: installCommand, help: INSTALL_HELP },
   doctor: { run: doctorCommand, help: DOCTOR_HELP },
